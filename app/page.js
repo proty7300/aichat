@@ -633,6 +633,18 @@ export default function ChatPage() {
             font-size: 12px !important;
             padding: 6px 10px !important;
           }
+          /* Fix dropdown overflow on mobile */
+          .model-selector-dropdown,
+          .mode-selector-dropdown {
+            max-height: 250px !important;
+            overflow-y: auto !important;
+            position: fixed !important;
+            z-index: 9999 !important;
+          }
+          /* Prevent body scroll when dropdown open */
+          body.dropdown-open {
+            overflow: hidden !important;
+          }
         }
       `}</style>
     </div>

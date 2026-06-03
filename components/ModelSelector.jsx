@@ -39,27 +39,29 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
 
         {openMode && (
           <div style={{
-            position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
+            position: 'fixed', left: 12, right: 12, bottom: 100, zIndex: 9999,
             background: 'var(--bg)', border: '1px solid var(--border)',
-            borderRadius: 10, overflow: 'hidden', minWidth: 180,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+            borderRadius: 12, overflow: 'hidden',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+            maxHeight: '60vh', overflowY: 'auto',
           }}>
             {Object.values(MODES).map((m) => (
               <button
                 key={m.id}
                 onClick={() => { setMode(m.id); setOpenMode(false) }}
                 style={{
-                  width: '100%', padding: '9px 14px',
+                  width: '100%', padding: '12px 16px',
                   background: m.id === mode ? 'var(--bg-secondary)' : 'none',
                   border: 'none', cursor: 'pointer', textAlign: 'left',
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  color: 'var(--text)', fontSize: 13,
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  color: 'var(--text)', fontSize: 14,
+                  borderBottom: '1px solid var(--border)',
                 }}
               >
-                <span style={{ fontSize: 16 }}>{m.icon}</span>
+                <span style={{ fontSize: 18 }}>{m.icon}</span>
                 <div>
                   <div style={{ fontWeight: 500 }}>{m.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.description}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.description}</div>
                 </div>
               </button>
             ))}
@@ -84,11 +86,11 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
 
         {openModel && (
           <div style={{
-            position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
+            position: 'fixed', left: 12, right: 12, bottom: 100, zIndex: 9999,
             background: 'var(--bg)', border: '1px solid var(--border)',
-            borderRadius: 10, overflow: 'hidden', minWidth: 260,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-            maxHeight: 360, overflowY: 'auto',
+            borderRadius: 12, overflow: 'hidden',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+            maxHeight: '60vh', overflowY: 'auto',
           }}>
             {Object.values(PROVIDERS).map((provider) => {
               const models = availableModels.filter((m) => m.provider === provider.id)
@@ -97,14 +99,14 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
               return (
                 <div key={provider.id}>
                   <div style={{
-                    padding: '8px 14px 4px',
-                    fontSize: 11, fontWeight: 600,
+                    padding: '12px 16px 8px',
+                    fontSize: 12, fontWeight: 600,
                     color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
                     display: 'flex', alignItems: 'center', gap: 6,
                   }}>
                     {provider.name}
                     {!hasKey && (
-                      <span style={{ color: '#f59e0b', fontSize: 10 }}>• No key</span>
+                      <span style={{ color: '#f59e0b', fontSize: 11 }}>• No key</span>
                     )}
                   </div>
                   {models.map((m) => (
@@ -112,11 +114,12 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
                       key={m.id}
                       onClick={() => { setModel(m.id); setOpenModel(false) }}
                       style={{
-                        width: '100%', padding: '8px 14px',
+                        width: '100%', padding: '10px 16px',
                         background: m.id === model ? 'var(--bg-secondary)' : 'none',
                         border: 'none', cursor: 'pointer', textAlign: 'left',
                         color: hasKey ? 'var(--text)' : 'var(--text-muted)',
-                        fontSize: 13, opacity: hasKey ? 1 : 0.6,
+                        fontSize: 14, opacity: hasKey ? 1 : 0.6,
+                        borderBottom: '1px solid var(--border)',
                       }}
                     >
                       {m.name}
@@ -132,7 +135,7 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
       {/* Click outside to close */}
       {(openModel || openMode) && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+          style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.4)' }}
           onClick={() => { setOpenModel(false); setOpenMode(false) }}
         />
       )}
