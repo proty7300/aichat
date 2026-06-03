@@ -38,38 +38,42 @@ export async function POST(req) {
 
     // ── Streaming chat ──
     console.log('Calling streamChat with providerId:', providerId, 'model:', model)
-    const upstreamResponse = await streamChat({ providerId, model, modeId, messages, overrideKey })
-
-    // Check if this is a non-streaming response (Freemodel)
-    const contentType = upstreamResponse.headers.get('content-type') || ''
-    console.log('Response content-type:', contentType, 'providerId:', providerId)
     
-    if (contentType.includes('application/json')) {
-      // Non-streaming response - parse OpenAI-compatible format
-      const data = await upstreamResponse.json()
-      console.log('Non-streaming response data:', JSON.stringify(data, null, 2))
-      const text = data.choices?.[0]?.message?.content || data.content?.[0]?.text || ''
-      console.log('Extracted text:', text)
-      if (!text) {
-        return new Response(`data: ${JSON.stringify({ error: 'Empty response from API' })}\n\ndata: [DONE]\n\n`, {
+    try {
+      const upstreamResponse = await streamChat({ providerId, model, modeId, messages, overrideKey })
+      console.log('streamChat returned, status:', upstreamResponse.status)
+
+      // Check if this is a non-streaming response (Freemodel)
+      const contentType = upstreamResponse.headers.get('content-type') || ''
+      console.log('Response content-type:', contentType, 'providerId:', providerId)
+      
+      if (contentType.includes('application/json')) {
+        // Non-streaming response - parse OpenAI-compatible format
+        const data = await upstreamResponse.json()
+        console.log('Non-streaming response data:', JSON.stringify(data, null, 2))
+        const text = data.choices?.[0]?.message?.content || data.content?.[0]?.text || ''
+        console.log('Extracted text:', text)
+        if (!text) {
+          return new Response(`data: ${JSON.stringify({ error: 'Empty response from API' })}\n\ndata: [DONE]\n\n`, {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+            },
+          })
+        }
+        return new Response(`data: ${JSON.stringify({ text })}\n\ndata: [DONE]\n\n`, {
           headers: {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
           },
         })
       }
-      return new Response(`data: ${JSON.stringify({ text })}\n\ndata: [DONE]\n\n`, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-        },
-      })
-    }
 
-    const encoder = new TextEncoder()
-    const decoder = new TextDecoder()
+      // Streaming response
+      const encoder = new TextEncoder()
+      const decoder = new TextDecoder()
 
-    const stream = new ReadableStream({
+      const stream = new ReadableStream({
       async start(controller) {
         const reader = upstreamResponse.body.getReader()
         let buffer = ''
