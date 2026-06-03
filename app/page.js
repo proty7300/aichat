@@ -110,21 +110,22 @@ export default function ChatPage() {
 
   const newChat = useCallback(async () => {
     const id = genId()
-    const chat = { id, title: 'Chat baru', messages: [], model, mode, userId: user?.uid || null }
-    
-    // Save to Firestore if logged in
-    if (user) {
-      try {
-        const chatId = await saveChat(user.uid, chat)
-        chat.id = chatId
-      } catch (error) {
-        console.error('Create chat error:', error)
-      }
-    }
+    const chat = { id, title: 'Chat baru', messages: [], model, mode }
     
     setChats((prev) => [chat, ...prev])
     setActiveChatId(id)
     setInput('')
+    
+    // Save to Firestore if logged in (after chat created)
+    if (user) {
+      try {
+        console.log('Creating new chat for user:', user.uid)
+        const firestoreId = await saveChat(user.uid, { ...chat, userId: user.uid })
+        console.log('Chat created with Firestore ID:', firestoreId)
+      } catch (error) {
+        console.error('Create chat error:', error)
+      }
+    }
   }, [model, mode, user])
 
   const deleteChat = async (id) => {
@@ -144,26 +145,25 @@ export default function ChatPage() {
   }
 
   const updateChat = async (id, updater) => {
-    setChats((prev) => prev.map((c) => {
-      if (c.id !== id) return c
-      const updated = updater(c)
-      return updated
-    }))
+    const chatToUpdate = chats.find(c => c.id === id)
+    const updatedChat = updater(chatToUpdate || {})
+    
+    setChats((prev) => prev.map((c) => (c.id === id ? updatedChat : c)))
     
     // Save to Firestore if logged in
-    if (user) {
-      const updatedChat = updater(chats.find(c => c.id === id) || {})
+    if (user && updatedChat.messages?.length > 0) {
       try {
+        console.log('Updating chat:', { id, userId: user.uid, messages: updatedChat.messages.length })
         if (updatedChat.userId) {
-          // Update existing Firestore doc
           await updateChatInDb(id, updatedChat)
+          console.log('Chat updated in Firestore')
         } else {
-          // Create new Firestore doc (first message in new chat)
           updatedChat.userId = user.uid
-          await saveChat(user.uid, updatedChat)
+          const firestoreId = await saveChat(user.uid, updatedChat)
+          console.log('Chat saved to Firestore with ID:', firestoreId)
         }
       } catch (error) {
-        console.error('Save chat error:', error)
+        console.error('Update chat error:', error.message)
       }
     }
   }
