@@ -89,13 +89,8 @@ export async function POST(req) {
             buffer = lines.pop() || '' // Keep incomplete line in buffer
 
             let text = ''
-            if (providerId === 'anthropic') {
-              text = parseAnthropicStream(lines.join('\n') + '\n')
-            } else if (providerId === 'google') {
-              text = parseGoogleStream(lines.join('\n') + '\n')
-            } else {
-              text = parseOpenAIStream(lines.join('\n') + '\n')
-            }
+            // All remaining providers use OpenAI-compatible stream format
+            text = parseOpenAIStream(lines.join('\n') + '\n')
 
             if (text) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`))
@@ -104,13 +99,7 @@ export async function POST(req) {
           // Process any remaining buffer
           if (buffer.trim()) {
             let text = ''
-            if (providerId === 'anthropic') {
-              text = parseAnthropicStream(buffer)
-            } else if (providerId === 'google') {
-              text = parseGoogleStream(buffer)
-            } else {
-              text = parseOpenAIStream(buffer)
-            }
+            text = parseOpenAIStream(buffer)
             if (text) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`))
             }

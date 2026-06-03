@@ -144,14 +144,8 @@ ai-chat-web/
 
 | Provider | Model | Chat | Coding | Reasoning | Image Gen |
 |---|---|---|---|---|---|
-| OpenAI | GPT-4o, GPT-4o Mini, o1 | ✅ | ✅ | ✅ | ✅ DALL-E 3 |
-| Anthropic | Claude Sonnet 4, Opus 4, Haiku | ✅ | ✅ | ✅ | ❌ |
-| Google | Gemini 2.5 Pro, Flash | ✅ | ✅ | ✅ | ✅ Imagen 3 |
-| DeepSeek | V3, R1 | ✅ | ✅ | ✅ | ❌ |
-| Mistral | Large, Codestral | ✅ | ✅ | ❌ | ❌ |
-| **General Compute** | DeepSeek V3.2/V3.1 Reasoning, MiniMax M2.7 | ✅ | ✅ | ✅ | ❌ |
-| **Freemodel** | Claude-t0, GPT-4o, GPT-4o Mini | ✅ | ✅ | ✅ | ❌ |
-| **Cerebras** | Claude-t0, GPT-4o | ✅ | ✅ | ✅ | ❌ |
+| **General Compute** | DeepSeek V3.2, V3.1, MiniMax M2.7 | ✅ | ✅ | ✅ | ❌ |
+| **Cerebras** | Z.ai GLM 4.7, OpenAI GPT OSS | ✅ | ✅ | ✅ | ❌ |
 
 ---
 
