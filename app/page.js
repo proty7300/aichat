@@ -1,11 +1,12 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Menu, X, Moon, Sun, Download, Image as ImageIcon } from 'lucide-react'
+import { Send, Menu, X, Moon, Sun, Download, Image as ImageIcon, LogIn, LogOut, User } from 'lucide-react'
 import MessageRenderer from '@/components/MessageRenderer'
 import ModelSelector from '@/components/ModelSelector'
 import Sidebar from '@/components/Sidebar'
 import SettingsModal, { loadOverrideKeys } from '@/components/SettingsModal'
 import { getAllModels } from '@/lib/models'
+import { supabase, signInWithGoogle, signOut, onAuthChange, saveChat, updateChat, deleteChat, loadChats, uploadImageToR2 } from '@/lib/supabase'
 
 const DEFAULT_MODEL = 'deepseek-v3.2'
 const DEFAULT_MODE = 'chat'
@@ -24,23 +25,46 @@ export default function ChatPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [dark, setDark] = useState(false)
   const [serverProviders, setServerProviders] = useState([])
+  const [user, setUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [hasLoadedChats, setHasLoadedChats] = useState(false)
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
 
   const activeChat = chats.find((c) => c.id === activeChatId) || null
 
+  // Auth state listener
   useEffect(() => {
-    const savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
-    setChats(savedChats)
-    if (savedChats.length > 0) {
-      setActiveChatId(savedChats[0].id)
-    }
-    fetch('/api/models').then((r) => r.json()).then(setServerProviders).catch(() => {})
+    const { data: { subscription } } = onAuthChange(async (user) => {
+      setUser(user)
+      setAuthLoading(false)
+      
+      if (user && !hasLoadedChats) {
+        await loadUserChats(user.id)
+        setHasLoadedChats(true)
+      }
+    })
+    
+    return () => subscription.unsubscribe()
   }, [])
 
+  // Load chats from Supabase
+  const loadUserChats = async (userId) => {
+    try {
+      const userChats = await loadChats(userId)
+      setChats(userChats)
+      if (userChats.length > 0) {
+        setActiveChatId(userChats[0].id)
+      }
+    } catch (error) {
+      console.error('Error loading chats:', error)
+    }
+  }
+
+  // Save chats to localStorage as backup
   useEffect(() => {
-    localStorage.setItem('ai_chats', JSON.stringify(chats))
+    localStorage.setItem('ai_chats_backup', JSON.stringify(chats))
   }, [chats])
 
   useEffect(() => {
@@ -52,6 +76,10 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeChat?.messages, isLoading])
+
+  useEffect(() => {
+    fetch('/api/models').then((r) => r.json()).then(setServerProviders).catch(() => {})
+  }, [])
 
   const toggleDark = () => {
     const next = !dark
@@ -68,15 +96,41 @@ export default function ChatPage() {
     setInput('')
   }, [model, mode])
 
-  const deleteChat = (id) => {
-    setChats((prev) => prev.filter((c) => c.id !== id))
-    if (activeChatId === id) {
-      setActiveChatId(chats.find((c) => c.id !== id)?.id || null)
+  const deleteChatFromDb = async (id) => {
+    try {
+      await deleteChat(id)
+      setChats((prev) => prev.filter((c) => c.id !== id))
+      if (activeChatId === id) {
+        setActiveChatId(chats.find((c) => c.id !== id)?.id || null)
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error)
+      alert('Gagal hapus chat: ' + error.message)
     }
   }
 
-  const updateChat = (id, updater) => {
-    setChats((prev) => prev.map((c) => (c.id === id ? updater(c) : c)))
+  const updateChatInDb = async (id, updater) => {
+    const chat = chats.find((c) => c.id === id)
+    if (!chat) return
+    
+    const updatedChat = updater(chat)
+    
+    // Update local state first (optimistic)
+    setChats((prev) => prev.map((c) => (c.id === id ? updatedChat : c)))
+    
+    // Sync to Supabase (debounced)
+    if (user) {
+      try {
+        await updateChat(id, {
+          messages: updatedChat.messages,
+          title: updatedChat.title,
+          model: updatedChat.model,
+          mode: updatedChat.mode,
+        })
+      } catch (error) {
+        console.error('Error updating chat:', error)
+      }
+    }
   }
 
   const sendMessage = async () => {
@@ -90,12 +144,21 @@ export default function ChatPage() {
       setChats((prev) => [chat, ...prev])
       setActiveChatId(id)
       chatId = id
+      
+      // Save new chat to Supabase
+      if (user) {
+        try {
+          await saveChat(user.id, { title: genTitle(text), messages: [], model, mode })
+        } catch (error) {
+          console.error('Error saving chat:', error)
+        }
+      }
     }
 
     const userMsg = { id: genId(), role: 'user', content: text }
     const assistantMsg = { id: genId(), role: 'assistant', content: '', isStreaming: true }
 
-    updateChat(chatId, (c) => ({
+    updateChatInDb(chatId, (c) => ({
       ...c,
       title: c.messages.length === 0 ? genTitle(text) : c.title,
       messages: [...c.messages, userMsg, assistantMsg],
@@ -138,10 +201,23 @@ export default function ChatPage() {
       if (contentType?.includes('application/json')) {
         const data = await res.json()
         if (data.type === 'image') {
-          const imgContent = data.url
-            ? `![Generated image](${data.url})\n\n*Prompt: ${data.revisedPrompt || data.prompt}*`
-            : `![Generated image](data:image/png;base64,${data.b64})\n\n*Prompt: ${data.prompt}*`
-          updateChat(chatId, (c) => ({
+          let imgContent
+          if (data.url) {
+            // Upload to R2
+            try {
+              const response = await fetch(data.url)
+              const blob = await response.blob()
+              const r2Url = await uploadImageToR2(blob, chatId, `image-${Date.now()}.png`)
+              imgContent = `![Generated image](${r2Url})\n\n*Prompt: ${data.revisedPrompt || data.prompt}*`
+            } catch (error) {
+              console.error('R2 upload error:', error)
+              imgContent = `![Generated image](${data.url})\n\n*Prompt: ${data.revisedPrompt || data.prompt}*`
+            }
+          } else if (data.b64) {
+            imgContent = `![Generated image](data:image/png;base64,${data.b64})\n\n*Prompt: ${data.prompt}*`
+          }
+          
+          updateChatInDb(chatId, (c) => ({
             ...c,
             messages: c.messages.map((m) =>
               m.id === assistantMsg.id ? { ...m, content: imgContent, isStreaming: false } : m
@@ -170,7 +246,7 @@ export default function ChatPage() {
             if (parsed.error) throw new Error(parsed.error)
             if (parsed.text) {
               accumulated += parsed.text
-              updateChat(chatId, (c) => ({
+              updateChatInDb(chatId, (c) => ({
                 ...c,
                 messages: c.messages.map((m) =>
                   m.id === assistantMsg.id ? { ...m, content: accumulated } : m
@@ -183,7 +259,7 @@ export default function ChatPage() {
         }
       }
 
-      updateChat(chatId, (c) => ({
+      updateChatInDb(chatId, (c) => ({
         ...c,
         messages: c.messages.map((m) =>
           m.id === assistantMsg.id ? { ...m, isStreaming: false } : m
@@ -191,7 +267,7 @@ export default function ChatPage() {
       }))
     } catch (err) {
       if (err.name === 'AbortError') return
-      updateChat(chatId, (c) => ({
+      updateChatInDb(chatId, (c) => ({
         ...c,
         messages: c.messages.map((m) =>
           m.id === assistantMsg.id
@@ -203,6 +279,26 @@ export default function ChatPage() {
       setIsLoading(false)
       abortRef.current = null
       textareaRef.current?.focus()
+    }
+  }
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithGoogle()
+    } catch (error) {
+      console.error('Sign in error:', error)
+      alert('Login gagal: ' + error.message)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await signOut()
+      setChats([])
+      setActiveChatId(null)
+      setHasLoadedChats(false)
+    } catch (error) {
+      console.error('Logout error:', error)
     }
   }
 
@@ -229,6 +325,14 @@ export default function ChatPage() {
     URL.revokeObjectURL(url)
   }
 
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
+        <div>Loading...</div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
       <div style={{ display: 'flex', height: '100%' }} className="sidebar-desktop">
@@ -237,7 +341,7 @@ export default function ChatPage() {
           activeChatId={activeChatId}
           onNewChat={newChat}
           onSelectChat={setActiveChatId}
-          onDeleteChat={deleteChat}
+          onDeleteChat={deleteChatFromDb}
           onOpenSettings={() => setSettingsOpen(true)}
         />
       </div>
@@ -251,7 +355,7 @@ export default function ChatPage() {
               activeChatId={activeChatId}
               onNewChat={newChat}
               onSelectChat={setActiveChatId}
-              onDeleteChat={deleteChat}
+              onDeleteChat={deleteChatFromDb}
               onOpenSettings={() => { setSettingsOpen(true); setSidebarOpen(false) }}
               isMobile
               onClose={() => setSidebarOpen(false)}
@@ -282,6 +386,56 @@ export default function ChatPage() {
           />
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {user ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text)' }}>
+                  <User size={14} />
+                  <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user.email?.split('@')[0]}
+                  </span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  title="Logout"
+                  style={{
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 12,
+                  }}
+                >
+                  <LogOut size={14} />
+                  <span className="desktop-only">Logout</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleSignIn}
+                title="Login dengan Google"
+                style={{
+                  background: '#4285f4',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '6px 14px',
+                  cursor: 'pointer',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
+              >
+                <LogIn size={14} />
+                <span className="desktop-only">Login</span>
+              </button>
+            )}
             <button onClick={exportChat} title="Export chat" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 6 }}>
               <Download size={16} />
             </button>
@@ -361,6 +515,11 @@ export default function ChatPage() {
             <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
               AI bisa membuat kesalahan. Periksa informasi penting.
             </p>
+            {!user && (
+              <p style={{ margin: '8px 0 0', fontSize: 11, color: '#f59e0b', textAlign: 'center' }}>
+                💡 Login untuk menyimpan chat secara permanen di cloud
+              </p>
+            )}
           </div>
         </div>
       </div>
