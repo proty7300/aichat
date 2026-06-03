@@ -243,6 +243,10 @@ export default function ChatPage() {
     const modelInfo = allModels.find((m) => m.id === model)
     const providerId = modelInfo?.provider || 'generalcompute'
     const overrideKey = overrideKeys[providerId] || ''
+    
+    console.log('Override keys:', overrideKeys)
+    console.log('Selected provider:', providerId)
+    console.log('Override key for provider:', overrideKey ? overrideKey.substring(0, 10) + '...' : 'NONE')
 
     const currentChat = chats.find((c) => c.id === chatId)
     const history = (currentChat?.messages || [])

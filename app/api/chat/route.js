@@ -13,6 +13,8 @@ export async function POST(req) {
     if (modeId === 'image') {
       const lastMsg = messages[messages.length - 1]?.content || ''
       let result
+      
+      console.log('Image gen request:', { providerId, model, hasOverrideKey: !!overrideKey })
 
       // Use provider-specific image generation
       if (providerId === 'generalcompute') {
@@ -31,8 +33,12 @@ export async function POST(req) {
           model: model,
         })
       } else if (providerId === 'google') {
+        console.log('Using Google Imagen with override key:', overrideKey ? 'YES' : 'NO')
         const apiKey = overrideKey || process.env.GOOGLE_API_KEY
-        if (!apiKey) throw new Error('Google API key tidak ditemukan')
+        if (!apiKey) {
+          console.error('No Google API key found!')
+          throw new Error('Google API key tidak ditemukan. Set di Settings.')
+        }
         result = await generateImageGoogle({ prompt: lastMsg, apiKey })
         return Response.json({
           type: 'image',
