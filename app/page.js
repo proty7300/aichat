@@ -150,42 +150,30 @@ export default function ChatPage() {
     }
   }
 
-  const updateChatInDb = async (chat, updater) => {
-    if (!chat) return
-    
-    const updatedChat = updater(chat)
-    const id = chat.id
-    
-    // Update local state first (optimistic)
-    setChats((prev) => prev.map((c) => (c.id === id ? updatedChat : c)))
+  const updateChatInDb = async (chatId, updater) => {
+    // Get latest chat from state using functional update
+    let chatToUpdate = null
+    setChats((prev) => {
+      chatToUpdate = prev.find((c) => c.id === chatId)
+      if (!chatToUpdate) return prev
+      const updatedChat = updater(chatToUpdate)
+      return prev.map((c) => (c.id === chatId ? updatedChat : c))
+    })
     
     // Sync to Supabase (always try if user is logged in)
-    if (user && id && typeof id === 'string' && id.includes('-')) {
+    if (user && chatToUpdate && chatId && typeof chatId === 'string' && chatId.includes('-')) {
       // UUID format check - only sync if it's a Supabase UUID
       try {
-        console.log('Syncing chat to Supabase:', id)
-        const result = await updateChat(id, {
-          messages: updatedChat.messages,
-          title: updatedChat.title,
-          model: updatedChat.model,
-          mode: updatedChat.mode,
+        console.log('Syncing chat to Supabase:', chatId)
+        const result = await updateChat(chatId, {
+          messages: chatToUpdate.messages,
+          title: chatToUpdate.title,
+          model: chatToUpdate.model,
+          mode: chatToUpdate.mode,
         })
         console.log('Chat synced successfully:', result)
       } catch (error) {
         console.error('Error syncing chat:', error.message)
-        // Retry once after 500ms
-        setTimeout(async () => {
-          try {
-            await updateChat(id, {
-              messages: updatedChat.messages,
-              title: updatedChat.title,
-              model: updatedChat.model,
-              mode: updatedChat.mode,
-            })
-          } catch (retryError) {
-            console.error('Retry failed:', retryError.message)
-          }
-        }, 500)
       }
     }
   }
@@ -230,7 +218,7 @@ export default function ChatPage() {
     const userMsg = { id: genId(), role: 'user', content: text }
     const assistantMsg = { id: genId(), role: 'assistant', content: '', isStreaming: true }
 
-    updateChatInDb(chat, (c) => ({
+    updateChatInDb(chatId, (c) => ({
       ...c,
       title: c.messages.length === 0 ? genTitle(text) : c.title,
       messages: [...c.messages, userMsg, assistantMsg],
@@ -290,7 +278,7 @@ export default function ChatPage() {
             imgContent = `![Generated image](data:image/png;base64,${data.b64})\n\n*Prompt: ${data.prompt}*`
           }
           
-          updateChatInDb(chat, (c) => ({
+          updateChatInDb(chatId, (c) => ({
             ...c,
             messages: c.messages.map((m) =>
               m.id === assistantMsg.id ? { ...m, content: imgContent, isStreaming: false } : m
@@ -319,7 +307,7 @@ export default function ChatPage() {
             if (parsed.error) throw new Error(parsed.error)
             if (parsed.text) {
               accumulated += parsed.text
-              updateChatInDb(chat, (c) => ({
+              updateChatInDb(chatId, (c) => ({
                 ...c,
                 messages: c.messages.map((m) =>
                   m.id === assistantMsg.id ? { ...m, content: accumulated } : m
@@ -332,7 +320,7 @@ export default function ChatPage() {
         }
       }
 
-      updateChatInDb(chat, (c) => ({
+      updateChatInDb(chatId, (c) => ({
         ...c,
         messages: c.messages.map((m) =>
           m.id === assistantMsg.id ? { ...m, isStreaming: false } : m
@@ -340,7 +328,7 @@ export default function ChatPage() {
       }))
     } catch (err) {
       if (err.name === 'AbortError') return
-      updateChatInDb(chat, (c) => ({
+      updateChatInDb(chatId, (c) => ({
         ...c,
         messages: c.messages.map((m) =>
           m.id === assistantMsg.id
