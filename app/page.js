@@ -64,7 +64,14 @@ export default function ChatPage() {
       setAuthLoading(false)
       
       if (user && !hasLoadedChats) {
-        await loadUserChats(user.id)
+        // Only load from Supabase if we don't have chats yet
+        const existingChats = JSON.parse(localStorage.getItem('ai_chats_backup') || '[]')
+        if (existingChats.length === 0) {
+          await loadUserChats(user.id)
+        } else {
+          // Keep localStorage chats, but sync to Supabase in background
+          console.log('Keeping localStorage chats, will sync to Supabase')
+        }
         setHasLoadedChats(true)
       }
     })
@@ -90,7 +97,10 @@ export default function ChatPage() {
 
   // Save chats to localStorage as backup
   useEffect(() => {
-    localStorage.setItem('ai_chats_backup', JSON.stringify(chats))
+    if (chats.length > 0) {
+      localStorage.setItem('ai_chats_backup', JSON.stringify(chats))
+      console.log('Saved', chats.length, 'chats to localStorage')
+    }
   }, [chats])
 
   useEffect(() => {
