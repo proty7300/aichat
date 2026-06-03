@@ -150,12 +150,12 @@ export default function ChatPage() {
         const isNewChat = !updatedChat.savedToFirestore
         
         if (isNewChat) {
-          // First message - create new Firestore doc
+          // First message - create new Firestore doc with SAME ID
           console.log('Saving new chat to Firestore:', { id, userId: user.uid })
-          await saveChat(user.uid, { ...updatedChat, userId: user.uid })
+          await saveChat(user.uid, { ...updatedChat, id, userId: user.uid })
           // Mark as saved
           setChats((prev) => prev.map((c) => (c.id === id ? { ...c, savedToFirestore: true } : c)))
-          console.log('Chat saved to Firestore')
+          console.log('Chat saved to Firestore with ID:', id)
         } else {
           // Existing chat - update Firestore doc
           console.log('Updating chat in Firestore:', { id, userId: user.uid })
