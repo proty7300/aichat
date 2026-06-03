@@ -6,7 +6,7 @@ import ModelSelector from '@/components/ModelSelector'
 import Sidebar from '@/components/Sidebar'
 import SettingsModal, { loadOverrideKeys } from '@/components/SettingsModal'
 import { getAllModels } from '@/lib/models'
-import { signInWithGoogle, logout, onAuthChange, subscribeToChats, saveChat, updateChat as updateChatInDb, deleteChat as deleteChatFromDb } from '@/lib/firebase'
+import { signInWithGoogle, logout, onAuthChange, loadChats, saveChat, updateChat as updateChatInDb, deleteChat as deleteChatFromDb } from '@/lib/firebase'
 
 const DEFAULT_MODEL = 'deepseek-v3.2'
 const DEFAULT_MODE = 'chat'
@@ -34,52 +34,18 @@ export default function ChatPage() {
 
   const activeChat = chats.find((c) => c.id === activeChatId)
 
-  // Auth state listener
+  // Auth state listener - load chats once on login
   useEffect(() => {
-    const unsubscribe = onAuthChange((currentUser) => {
+    const unsubscribe = onAuthChange(async (currentUser) => {
       setUser(currentUser)
       setAuthLoading(false)
       
       if (currentUser) {
-        // Subscribe to user's chats from Firestore
-        unsubscribeRef.current = subscribeToChats(currentUser.uid, (userChats) => {
-          // Merge Firestore chats with local state
-          setChats(prevChats => {
-            // Create map of Firestore chats by ID
-            const firestoreChatMap = new Map()
-            userChats.forEach(chat => {
-              firestoreChatMap.set(chat.id, {
-                ...chat,
-                messages: chat.messages || [],
-              })
-            })
-            
-            // Merge: prefer Firestore data, but keep local chats that aren't in Firestore yet
-            const mergedChats = []
-            const seenIds = new Set()
-            
-            // Add all Firestore chats
-            userChats.forEach(chat => {
-              mergedChats.push({
-                ...chat,
-                messages: chat.messages || [],
-              })
-              seenIds.add(chat.id)
-            })
-            
-            // Add local chats not in Firestore (new chats being created)
-            prevChats.forEach(chat => {
-              if (!seenIds.has(chat.id)) {
-                mergedChats.push(chat)
-              }
-            })
-            
-            return mergedChats
-          })
-        })
+        // Load chats from Firestore once (no real-time subscription)
+        const userChats = await loadChats(currentUser.uid)
+        setChats(userChats)
       } else {
         // No user - use localStorage (fallback)
-        if (unsubscribeRef.current) unsubscribeRef.current()
         const savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
         setChats(savedChats)
       }
@@ -87,16 +53,10 @@ export default function ChatPage() {
     return () => unsubscribe()
   }, [])
 
-  // Save chats to Firestore or localStorage
+  // Save chats to localStorage when not logged in
   useEffect(() => {
-    if (authLoading) return
-    
-    if (user) {
-      // Save to Firestore (handled by individual save/update calls)
-    } else {
-      // Save to localStorage
-      localStorage.setItem('ai_chats', JSON.stringify(chats))
-    }
+    if (authLoading || user) return
+    localStorage.setItem('ai_chats', JSON.stringify(chats))
   }, [chats, user, authLoading])
 
   useEffect(() => {
@@ -141,20 +101,21 @@ export default function ChatPage() {
     const id = genId()
     const chat = { id, title: 'Chat baru', messages: [], model, mode }
     
-    setChats((prev) => [chat, ...prev])
-    setActiveChatId(id)
-    setInput('')
-    
-    // Save to Firestore if logged in (after chat created)
+    // Save to Firestore first if logged in
     if (user) {
       try {
         console.log('Creating new chat for user:', user.uid)
         const firestoreId = await saveChat(user.uid, { ...chat, userId: user.uid })
+        chat.id = firestoreId // Use Firestore ID
         console.log('Chat created with Firestore ID:', firestoreId)
       } catch (error) {
         console.error('Create chat error:', error)
       }
     }
+    
+    setChats((prev) => [chat, ...prev])
+    setActiveChatId(id)
+    setInput('')
   }, [model, mode, user])
 
   const deleteChat = async (id) => {
@@ -183,14 +144,8 @@ export default function ChatPage() {
     if (user && updatedChat.messages?.length > 0) {
       try {
         console.log('Updating chat:', { id, userId: user.uid, messages: updatedChat.messages.length })
-        if (updatedChat.userId) {
-          await updateChatInDb(id, updatedChat)
-          console.log('Chat updated in Firestore')
-        } else {
-          updatedChat.userId = user.uid
-          const firestoreId = await saveChat(user.uid, updatedChat)
-          console.log('Chat saved to Firestore with ID:', firestoreId)
-        }
+        await updateChatInDb(id, updatedChat)
+        console.log('Chat updated in Firestore')
       } catch (error) {
         console.error('Update chat error:', error.message)
       }
