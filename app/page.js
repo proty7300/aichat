@@ -112,13 +112,14 @@ export default function ChatPage() {
     if (user) {
       try {
         const savedChat = await saveChat(user.id, { title: 'Chat baru', messages: [], model, mode })
-        // Update local chat with Supabase UUID
+        // Update local chat with Supabase UUID AND update activeChatId
         setChats((prev) => prev.map((c) => 
           c.id === localId ? { ...savedChat, isLocal: false } : c
         ))
-        setActiveChatId(savedChat.id)
+        setActiveChatId(savedChat.id) // ← Update to UUID
       } catch (error) {
         console.error('Error saving chat:', error)
+        // Keep local ID if save fails
       }
     }
   }, [model, mode, user])
@@ -181,10 +182,13 @@ export default function ChatPage() {
           setChats((prev) => prev.map((c) => 
             c.id === localId ? { ...savedChat, isLocal: false } : c
           ))
+          // Update chatId and chat to use UUID
           chatId = savedChat.id
           chat = savedChat
+          setActiveChatId(savedChat.id) // ← Update activeChatId to UUID
         } catch (error) {
           console.error('Error saving chat:', error)
+          // Keep local ID if save fails
         }
       }
     }
