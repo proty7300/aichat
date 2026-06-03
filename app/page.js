@@ -147,16 +147,32 @@ export default function ChatPage() {
     setChats((prev) => prev.map((c) => (c.id === id ? updatedChat : c)))
     
     // Sync to Supabase (always try if user is logged in)
-    if (user) {
+    if (user && id && typeof id === 'string' && id.includes('-')) {
+      // UUID format check - only sync if it's a Supabase UUID
       try {
-        await updateChat(id, {
+        console.log('Syncing chat to Supabase:', id)
+        const result = await updateChat(id, {
           messages: updatedChat.messages,
           title: updatedChat.title,
           model: updatedChat.model,
           mode: updatedChat.mode,
         })
+        console.log('Chat synced successfully:', result)
       } catch (error) {
-        console.error('Error updating chat:', error)
+        console.error('Error syncing chat:', error.message)
+        // Retry once after 500ms
+        setTimeout(async () => {
+          try {
+            await updateChat(id, {
+              messages: updatedChat.messages,
+              title: updatedChat.title,
+              model: updatedChat.model,
+              mode: updatedChat.mode,
+            })
+          } catch (retryError) {
+            console.error('Retry failed:', retryError.message)
+          }
+        }, 500)
       }
     }
   }
@@ -168,6 +184,8 @@ export default function ChatPage() {
     let chatId = activeChatId
     let chat = chats.find((c) => c.id === chatId)
     
+    console.log('sendMessage start:', { chatId, chatExists: !!chat, hasUser: !!user })
+    
     if (!chatId || !chat) {
       const localId = genId()
       chat = { id: localId, title: genTitle(text), messages: [], model, mode, isLocal: true }
@@ -178,19 +196,22 @@ export default function ChatPage() {
       // Save to Supabase if logged in
       if (user) {
         try {
+          console.log('Saving new chat to Supabase...')
           const savedChat = await saveChat(user.id, { title: genTitle(text), messages: [], model, mode })
+          console.log('Chat saved to Supabase:', savedChat.id)
           setChats((prev) => prev.map((c) => 
             c.id === localId ? { ...savedChat, isLocal: false } : c
           ))
           // Update chatId and chat to use UUID
           chatId = savedChat.id
           chat = savedChat
-          setActiveChatId(savedChat.id) // ← Update activeChatId to UUID
+          setActiveChatId(savedChat.id)
         } catch (error) {
           console.error('Error saving chat:', error)
-          // Keep local ID if save fails
         }
       }
+    } else {
+      console.log('Using existing chat:', chat.id, chat.isLocal)
     }
 
     const userMsg = { id: genId(), role: 'user', content: text }
