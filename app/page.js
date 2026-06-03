@@ -104,34 +104,23 @@ export default function ChatPage() {
     }
   }
 
-  const newChat = useCallback(async () => {
+  const newChat = useCallback(() => {
     const chatId = genId()
-    const chat = { id: chatId, title: 'Chat baru', messages: [], model, mode, firestoreId: null }
+    const chat = { id: chatId, title: 'Chat baru', messages: [], model, mode }
     
-    // Add to local state FIRST (so UI responds immediately)
+    // Add to local state ONLY (no Firestore yet)
     setChats((prev) => [chat, ...prev])
     setActiveChatId(chatId)
     setInput('')
-    
-    // Then save to Firestore if logged in (async, doesn't block UI)
-    if (user) {
-      try {
-        console.log('Creating new chat for user:', user.uid)
-        const firestoreId = await saveChat(user.uid, { ...chat, userId: user.uid })
-        console.log('Chat created with Firestore ID:', firestoreId)
-        // Store Firestore ID for future updates, but keep local ID for UI
-        setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, firestoreId } : c)))
-      } catch (error) {
-        console.error('Create chat error:', error)
-      }
-    }
-  }, [model, mode, user])
+    // Chat will be saved to Firestore after first message (in updateChat)
+  }, [model, mode])
 
   const deleteChat = async (id) => {
     if (user) {
       try {
         await deleteChatFromDb(id)
-        // Firestore will auto-sync via onSnapshot
+        // Remove from local state (Firestore already deleted)
+        setChats((prev) => prev.filter((c) => c.id !== id))
       } catch (error) {
         console.error('Delete error:', error)
       }
@@ -149,15 +138,27 @@ export default function ChatPage() {
     
     setChats((prev) => prev.map((c) => (c.id === id ? updatedChat : c)))
     
-    // Save to Firestore if logged in
+    // Save to Firestore if logged in and has messages
     if (user && updatedChat.messages?.length > 0) {
       try {
-        const firestoreId = updatedChat.firestoreId || id
-        console.log('Updating chat:', { id, firestoreId, userId: user.uid, messages: updatedChat.messages.length })
-        await updateChatInDb(firestoreId, updatedChat)
-        console.log('Chat updated in Firestore')
+        // Check if this is a new chat (first message) or existing chat
+        const isNewChat = !updatedChat.savedToFirestore
+        
+        if (isNewChat) {
+          // First message - create new Firestore doc
+          console.log('Saving new chat to Firestore:', { id, userId: user.uid })
+          await saveChat(user.uid, { ...updatedChat, userId: user.uid })
+          // Mark as saved
+          setChats((prev) => prev.map((c) => (c.id === id ? { ...c, savedToFirestore: true } : c)))
+          console.log('Chat saved to Firestore')
+        } else {
+          // Existing chat - update Firestore doc
+          console.log('Updating chat in Firestore:', { id, userId: user.uid })
+          await updateChatInDb(id, updatedChat)
+          console.log('Chat updated in Firestore')
+        }
       } catch (error) {
-        console.error('Update chat error:', error.message)
+        console.error('Save chat error:', error.message)
       }
     }
   }
