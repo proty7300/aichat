@@ -5,6 +5,9 @@ export const runtime = 'edge'
 export async function POST(req) {
   try {
     const { messages, providerId, model, modeId, overrideKey } = await req.json()
+    
+    // Debug logging
+    console.log('Chat request:', { providerId, model, modeId, hasOverrideKey: !!overrideKey })
 
     // ── Image generation mode ──
     if (modeId === 'image') {
@@ -34,6 +37,7 @@ export async function POST(req) {
     }
 
     // ── Streaming chat ──
+    console.log('Calling streamChat with providerId:', providerId, 'model:', model)
     const upstreamResponse = await streamChat({ providerId, model, modeId, messages, overrideKey })
 
     const encoder = new TextEncoder()
