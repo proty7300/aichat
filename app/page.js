@@ -46,7 +46,11 @@ export default function ChatPage() {
 
   // Load chats from localStorage on mount
   useEffect(() => {
-    const savedChats = JSON.parse(localStorage.getItem('ai_chats_backup') || '[]')
+    // Try ai_chats_backup first, then ai_chats (for backwards compatibility)
+    let savedChats = JSON.parse(localStorage.getItem('ai_chats_backup') || '[]')
+    if (!savedChats || savedChats.length === 0) {
+      savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
+    }
     if (savedChats.length > 0) {
       setChats(savedChats)
       setActiveChatId(savedChats[0].id)
