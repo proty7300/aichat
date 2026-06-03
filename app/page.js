@@ -44,6 +44,15 @@ export default function ChatPage() {
     })
   }, [activeChatId, chats])
 
+  // Load chats from localStorage on mount
+  useEffect(() => {
+    const savedChats = JSON.parse(localStorage.getItem('ai_chats_backup') || '[]')
+    if (savedChats.length > 0) {
+      setChats(savedChats)
+      setActiveChatId(savedChats[0].id)
+    }
+  }, [])
+
   // Auth state listener
   useEffect(() => {
     const { data: { subscription } } = onAuthChange(async (user) => {
