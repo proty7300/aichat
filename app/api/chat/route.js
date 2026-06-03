@@ -40,6 +40,20 @@ export async function POST(req) {
     console.log('Calling streamChat with providerId:', providerId, 'model:', model)
     const upstreamResponse = await streamChat({ providerId, model, modeId, messages, overrideKey })
 
+    // Check if this is a non-streaming response (Freemodel Claude)
+    const contentType = upstreamResponse.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      // Non-streaming response - parse and return as streaming format
+      const data = await upstreamResponse.json()
+      const text = data.content?.[0]?.text || data.content?.[0]?.parts?.[0]?.text || ''
+      return new Response(`data: ${JSON.stringify({ text })}\n\ndata: [DONE]\n\n`, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+      })
+    }
+
     const encoder = new TextEncoder()
     const decoder = new TextDecoder()
 
