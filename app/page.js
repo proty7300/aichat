@@ -33,6 +33,16 @@ export default function ChatPage() {
   const abortRef = useRef(null)
 
   const activeChat = chats.find((c) => c.id === activeChatId) || null
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('Current state:', { 
+      activeChatId, 
+      chatsCount: chats.length, 
+      activeChatExists: !!activeChat,
+      allChatIds: chats.map(c => ({ id: c.id, title: c.title }))
+    })
+  }, [activeChatId, chats])
 
   // Auth state listener
   useEffect(() => {
@@ -52,9 +62,12 @@ export default function ChatPage() {
   // Load chats from Supabase
   const loadUserChats = async (userId) => {
     try {
+      console.log('Loading chats for user:', userId)
       const userChats = await loadChats(userId)
+      console.log('Loaded chats from Supabase:', userChats)
       setChats(userChats)
       if (userChats.length > 0) {
+        console.log('Setting activeChatId to:', userChats[0].id)
         setActiveChatId(userChats[0].id)
       }
     } catch (error) {
