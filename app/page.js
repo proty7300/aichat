@@ -136,22 +136,16 @@ export default function ChatPage() {
     }
   }
 
-  const updateChatInDb = async (id, updater) => {
-    const chat = chats.find((c) => c.id === id)
+  const updateChatInDb = async (chat, updater) => {
     if (!chat) return
     
-    // Skip if chat is local (waiting for Supabase ID)
-    if (chat.isLocal) {
-      setChats((prev) => prev.map((c) => (c.id === id ? updater(c) : c)))
-      return
-    }
-    
     const updatedChat = updater(chat)
+    const id = chat.id
     
     // Update local state first (optimistic)
     setChats((prev) => prev.map((c) => (c.id === id ? updatedChat : c)))
     
-    // Sync to Supabase
+    // Sync to Supabase (always try if user is logged in)
     if (user) {
       try {
         await updateChat(id, {
@@ -198,7 +192,7 @@ export default function ChatPage() {
     const userMsg = { id: genId(), role: 'user', content: text }
     const assistantMsg = { id: genId(), role: 'assistant', content: '', isStreaming: true }
 
-    updateChatInDb(chatId, (c) => ({
+    updateChatInDb(chat, (c) => ({
       ...c,
       title: c.messages.length === 0 ? genTitle(text) : c.title,
       messages: [...c.messages, userMsg, assistantMsg],
@@ -214,7 +208,8 @@ export default function ChatPage() {
     const providerId = modelInfo?.provider || 'generalcompute'
     const overrideKey = overrideKeys[providerId] || ''
 
-    const history = (chats.find((c) => c.id === chatId)?.messages || [])
+    const currentChat = chats.find((c) => c.id === chatId)
+    const history = (currentChat?.messages || [])
       .filter((m) => !m.isStreaming)
       .map((m) => ({ role: m.role, content: m.content }))
 
@@ -257,7 +252,7 @@ export default function ChatPage() {
             imgContent = `![Generated image](data:image/png;base64,${data.b64})\n\n*Prompt: ${data.prompt}*`
           }
           
-          updateChatInDb(chatId, (c) => ({
+          updateChatInDb(chat, (c) => ({
             ...c,
             messages: c.messages.map((m) =>
               m.id === assistantMsg.id ? { ...m, content: imgContent, isStreaming: false } : m
@@ -286,7 +281,7 @@ export default function ChatPage() {
             if (parsed.error) throw new Error(parsed.error)
             if (parsed.text) {
               accumulated += parsed.text
-              updateChatInDb(chatId, (c) => ({
+              updateChatInDb(chat, (c) => ({
                 ...c,
                 messages: c.messages.map((m) =>
                   m.id === assistantMsg.id ? { ...m, content: accumulated } : m
@@ -299,7 +294,7 @@ export default function ChatPage() {
         }
       }
 
-      updateChatInDb(chatId, (c) => ({
+      updateChatInDb(chat, (c) => ({
         ...c,
         messages: c.messages.map((m) =>
           m.id === assistantMsg.id ? { ...m, isStreaming: false } : m
@@ -307,7 +302,7 @@ export default function ChatPage() {
       }))
     } catch (err) {
       if (err.name === 'AbortError') return
-      updateChatInDb(chatId, (c) => ({
+      updateChatInDb(chat, (c) => ({
         ...c,
         messages: c.messages.map((m) =>
           m.id === assistantMsg.id
