@@ -1,12 +1,11 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Menu, X, Moon, Sun, Download, Image as ImageIcon, LogIn, LogOut, User } from 'lucide-react'
+import { Send, Menu, X, Moon, Sun, Download, Image as ImageIcon } from 'lucide-react'
 import MessageRenderer from '@/components/MessageRenderer'
 import ModelSelector from '@/components/ModelSelector'
 import Sidebar from '@/components/Sidebar'
 import SettingsModal, { loadOverrideKeys } from '@/components/SettingsModal'
 import { getAllModels } from '@/lib/models'
-
 
 const DEFAULT_MODEL = 'deepseek-v3.2'
 const DEFAULT_MODE = 'chat'
@@ -31,19 +30,15 @@ export default function ChatPage() {
 
   const activeChat = chats.find((c) => c.id === activeChatId) || null
 
-  // Load chats from localStorage on mount
   useEffect(() => {
     const savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
     setChats(savedChats)
     if (savedChats.length > 0) {
       setActiveChatId(savedChats[0].id)
     }
-    
-    // Fetch available server providers
     fetch('/api/models').then((r) => r.json()).then(setServerProviders).catch(() => {})
   }, [])
 
-  // Save chats to localStorage
   useEffect(() => {
     localStorage.setItem('ai_chats', JSON.stringify(chats))
   }, [chats])
@@ -65,14 +60,9 @@ export default function ChatPage() {
     document.documentElement.classList.toggle('dark', next)
   }
 
-  // Login/Logout disabled temporarily
-  const handleSignIn = () => console.log('Login disabled')
-  const handleLogout = () => console.log('Logout disabled')
-
   const newChat = useCallback(() => {
     const chatId = genId()
     const chat = { id: chatId, title: 'Chat baru', messages: [], model, mode }
-    
     setChats((prev) => [chat, ...prev])
     setActiveChatId(chatId)
     setInput('')
@@ -93,7 +83,6 @@ export default function ChatPage() {
     const text = input.trim()
     if (!text || isLoading) return
 
-    // Create chat if none active
     let chatId = activeChatId
     if (!chatId) {
       const id = genId()
@@ -117,7 +106,6 @@ export default function ChatPage() {
     setIsLoading(true)
 
     const overrideKeys = loadOverrideKeys()
-    // Find provider for current model
     const allModels = getAllModels()
     const modelInfo = allModels.find((m) => m.id === model)
     const providerId = modelInfo?.provider || 'generalcompute'
@@ -146,7 +134,6 @@ export default function ChatPage() {
         throw new Error(err.error || 'Request gagal')
       }
 
-      // Image mode — non-streaming
       const contentType = res.headers.get('content-type')
       if (contentType?.includes('application/json')) {
         const data = await res.json()
@@ -165,7 +152,6 @@ export default function ChatPage() {
         }
       }
 
-      // Streaming response
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let accumulated = ''
@@ -197,7 +183,6 @@ export default function ChatPage() {
         }
       }
 
-      // Mark done
       updateChat(chatId, (c) => ({
         ...c,
         messages: c.messages.map((m) =>
@@ -244,11 +229,8 @@ export default function ChatPage() {
     URL.revokeObjectURL(url)
   }
 
-
-
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
-      {/* Sidebar — desktop */}
       <div style={{ display: 'flex', height: '100%' }} className="sidebar-desktop">
         <Sidebar
           chats={chats}
@@ -260,7 +242,6 @@ export default function ChatPage() {
         />
       </div>
 
-      {/* Sidebar — mobile overlay */}
       {sidebarOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex' }}>
           <div style={{ flex: 1, background: 'rgba(0,0,0,0.4)' }} onClick={() => setSidebarOpen(false)} />
@@ -279,9 +260,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Main chat area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        {/* Topbar */}
         <div style={{
           padding: '12px 16px',
           borderBottom: '1px solid var(--border)',
@@ -302,22 +281,18 @@ export default function ChatPage() {
             serverProviders={serverProviders}
           />
 
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={exportChat} title="Export chat" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 6 }}>
               <Download size={16} />
             </button>
             <button onClick={toggleDark} title="Toggle dark mode" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 6 }}>
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            {/* User Auth Button - REMOVED FOR NOW */}
-            {/* Login/Logout functionality disabled while we fix localStorage issues */}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           </div>
         </div>
 
-        {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0' }}>
-          {!activeChat || !activeChat.messages || activeChat.messages.length === 0 ? (
+          {!activeChat || activeChat.messages.length === 0 ? (
             <EmptyState mode={mode} onSuggestion={(s) => { setInput(s); textareaRef.current?.focus() }} />
           ) : (
             <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 16px' }}>
@@ -329,7 +304,6 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Input area */}
         <div style={{
           padding: '12px 16px 16px',
           borderTop: '1px solid var(--border)',
