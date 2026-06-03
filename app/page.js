@@ -387,11 +387,6 @@ export default function ChatPage() {
             <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
               AI bisa membuat kesalahan. Periksa informasi penting.
             </p>
-            {!user && (
-              <p style={{ margin: '8px 0 0', fontSize: 11, color: '#f59e0b', textAlign: 'center' }}>
-                💡 Login untuk menyimpan chat secara permanen di cloud
-              </p>
-            )}
           </div>
         </div>
       </div>
