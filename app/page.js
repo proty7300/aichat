@@ -6,7 +6,7 @@ import ModelSelector from '@/components/ModelSelector'
 import Sidebar from '@/components/Sidebar'
 import SettingsModal, { loadOverrideKeys } from '@/components/SettingsModal'
 import { getAllModels } from '@/lib/models'
-import { signInWithGoogle, logout, onAuthChange, loadChats, saveChat, updateChat as updateChatInDb, deleteChat as deleteChatFromDb } from '@/lib/firebase'
+
 
 const DEFAULT_MODEL = 'deepseek-v3.2'
 const DEFAULT_MODE = 'chat'
@@ -25,65 +25,38 @@ export default function ChatPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [dark, setDark] = useState(false)
   const [serverProviders, setServerProviders] = useState([])
-  const [user, setUser] = useState(null)
-  const [authLoading, setAuthLoading] = useState(true)
-  const [hasLoadedChats, setHasLoadedChats] = useState(false)
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
-  const unsubscribeRef = useRef(null)
 
-  const activeChat = chats.find((c) => c.id === activeChatId)
+  const activeChat = chats.find((c) => c.id === activeChatId) || null
 
-  // Auth state listener - load chats once on login
+  // Load chats from localStorage on mount
   useEffect(() => {
-    const unsubscribe = onAuthChange(async (currentUser) => {
-      setUser(currentUser)
-      setAuthLoading(false)
-      
-      if (currentUser && !hasLoadedChats) {
-        console.log('User logged in, loading chats from Firestore')
-        // Load chats from Firestore ONCE (first time login)
-        const userChats = await loadChats(currentUser.uid)
-        console.log('Loaded chats:', userChats.length)
-        setChats(userChats)
-        setHasLoadedChats(true)
-        // Set active chat to most recent if available
-        if (userChats.length > 0) {
-          setActiveChatId(userChats[0].id)
-        }
-      } else if (!currentUser && !hasLoadedChats) {
-        console.log('User logged out, using localStorage')
-        // No user - use localStorage (fallback)
-        const savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
-        setChats(savedChats)
-        setHasLoadedChats(true)
-        if (savedChats.length > 0) {
-          setActiveChatId(savedChats[0].id)
-        }
-      }
-    })
-    return () => unsubscribe()
-  }, [hasLoadedChats])
+    const savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
+    setChats(savedChats)
+    if (savedChats.length > 0) {
+      setActiveChatId(savedChats[0].id)
+    }
+    
+    // Fetch available server providers
+    fetch('/api/models').then((r) => r.json()).then(setServerProviders).catch(() => {})
+  }, [])
 
-  // Save chats to localStorage when not logged in
+  // Save chats to localStorage
   useEffect(() => {
-    if (authLoading || user) return
     localStorage.setItem('ai_chats', JSON.stringify(chats))
-  }, [chats, user, authLoading])
+  }, [chats])
 
   useEffect(() => {
     const savedDark = localStorage.getItem('ai_dark') === 'true'
     setDark(savedDark)
     document.documentElement.classList.toggle('dark', savedDark)
-
-    // Fetch available server providers
-    fetch('/api/models').then((r) => r.json()).then(setServerProviders).catch(() => {})
   }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [activeChat?.messages])
+  }, [activeChat?.messages, isLoading])
 
   const toggleDark = () => {
     const next = !dark
@@ -92,86 +65,28 @@ export default function ChatPage() {
     document.documentElement.classList.toggle('dark', next)
   }
 
-  const handleSignIn = async () => {
-    try {
-      await signInWithGoogle()
-    } catch (error) {
-      console.error('Sign in error:', error)
-      alert('Login gagal: ' + error.message)
-    }
-  }
-
-  const handleLogout = async () => {
-    try {
-      await logout()
-      // Chats will switch to localStorage mode
-    } catch (error) {
-      console.error('Logout error:', error)
-    }
-  }
+  // Login/Logout disabled temporarily
+  const handleSignIn = () => console.log('Login disabled')
+  const handleLogout = () => console.log('Logout disabled')
 
   const newChat = useCallback(() => {
     const chatId = genId()
     const chat = { id: chatId, title: 'Chat baru', messages: [], model, mode }
     
-    // Add to local state ONLY (no Firestore yet)
-    setChats((prev) => {
-      const newChats = [chat, ...prev]
-      console.log('New chat created:', { chatId, totalChats: newChats.length })
-      return newChats
-    })
+    setChats((prev) => [chat, ...prev])
     setActiveChatId(chatId)
     setInput('')
-    console.log('Active chat set to:', chatId)
-    // Chat will be saved to Firestore after first message (in updateChat)
   }, [model, mode])
 
-  const deleteChat = async (id) => {
-    if (user) {
-      try {
-        await deleteChatFromDb(id)
-        // Remove from local state (Firestore already deleted)
-        setChats((prev) => prev.filter((c) => c.id !== id))
-      } catch (error) {
-        console.error('Delete error:', error)
-      }
-    } else {
-      setChats((prev) => prev.filter((c) => c.id !== id))
-    }
+  const deleteChat = (id) => {
+    setChats((prev) => prev.filter((c) => c.id !== id))
     if (activeChatId === id) {
       setActiveChatId(chats.find((c) => c.id !== id)?.id || null)
     }
   }
 
-  const updateChat = async (id, updater) => {
-    const chatToUpdate = chats.find(c => c.id === id)
-    const updatedChat = updater(chatToUpdate || {})
-    
-    setChats((prev) => prev.map((c) => (c.id === id ? updatedChat : c)))
-    
-    // Save to Firestore if logged in and has messages
-    if (user && updatedChat.messages?.length > 0) {
-      try {
-        // Check if this is a new chat (first message) or existing chat
-        const isNewChat = !updatedChat.savedToFirestore
-        
-        if (isNewChat) {
-          // First message - create new Firestore doc with SAME ID
-          console.log('Saving new chat to Firestore:', { id, userId: user.uid })
-          await saveChat(user.uid, { ...updatedChat, id, userId: user.uid })
-          // Mark as saved
-          setChats((prev) => prev.map((c) => (c.id === id ? { ...c, savedToFirestore: true } : c)))
-          console.log('Chat saved to Firestore with ID:', id)
-        } else {
-          // Existing chat - update Firestore doc
-          console.log('Updating chat in Firestore:', { id, userId: user.uid })
-          await updateChatInDb(id, updatedChat)
-          console.log('Chat updated in Firestore')
-        }
-      } catch (error) {
-        console.error('Save chat error:', error.message)
-      }
-    }
+  const updateChat = (id, updater) => {
+    setChats((prev) => prev.map((c) => (c.id === id ? updater(c) : c)))
   }
 
   const sendMessage = async () => {
@@ -329,14 +244,7 @@ export default function ChatPage() {
     URL.revokeObjectURL(url)
   }
 
-  // Show loading while checking auth
-  if (authLoading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
-        <div>Loading...</div>
-      </div>
-    )
-  }
+
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
@@ -395,66 +303,15 @@ export default function ChatPage() {
           />
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-            {activeChat?.messages.length > 0 && (
-              <button onClick={exportChat} title="Export chat" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 6 }}>
-                <Download size={16} />
-              </button>
-            )}
+            <button onClick={exportChat} title="Export chat" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 6 }}>
+              <Download size={16} />
+            </button>
             <button onClick={toggleDark} title="Toggle dark mode" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 6 }}>
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            
-            {/* User Auth Button */}
-            {user ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text)' }}>
-                  <User size={14} />
-                  <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user.displayName || user.email}
-                  </span>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  title="Logout"
-                  style={{
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 6,
-                    padding: '6px 10px',
-                    cursor: 'pointer',
-                    color: 'var(--text-muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    fontSize: 12,
-                  }}
-                >
-                  <LogOut size={14} />
-                  <span className="desktop-only">Logout</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleSignIn}
-                title="Login dengan Google"
-                style={{
-                  background: '#4285f4',
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: '6px 14px',
-                  cursor: 'pointer',
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 13,
-                  fontWeight: 500,
-                }}
-              >
-                <LogIn size={14} />
-                <span className="desktop-only">Login</span>
-              </button>
-            )}
+            {/* User Auth Button - REMOVED FOR NOW */}
+            {/* Login/Logout functionality disabled while we fix localStorage issues */}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           </div>
         </div>
 
