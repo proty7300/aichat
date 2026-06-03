@@ -109,9 +109,14 @@ export default function ChatPage() {
     const chat = { id: chatId, title: 'Chat baru', messages: [], model, mode }
     
     // Add to local state ONLY (no Firestore yet)
-    setChats((prev) => [chat, ...prev])
+    setChats((prev) => {
+      const newChats = [chat, ...prev]
+      console.log('New chat created:', { chatId, totalChats: newChats.length })
+      return newChats
+    })
     setActiveChatId(chatId)
     setInput('')
+    console.log('Active chat set to:', chatId)
     // Chat will be saved to Firestore after first message (in updateChat)
   }, [model, mode])
 
