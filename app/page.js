@@ -431,6 +431,7 @@ export default function ChatPage() {
           borderBottom: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', gap: 10,
           background: 'var(--bg)',
+          justifyContent: 'space-between',
         }}>
           <button
             onClick={() => setSidebarOpen(true)}
@@ -440,11 +441,7 @@ export default function ChatPage() {
             <Menu size={20} />
           </button>
 
-          <ModelSelector
-            model={model} setModel={setModel}
-            mode={mode} setMode={setMode}
-            serverProviders={serverProviders}
-          />
+          <span style={{ fontWeight: 600, fontSize: 16, color: 'var(--text)' }}>AI Chat</span>
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
             {user ? (
@@ -525,6 +522,15 @@ export default function ChatPage() {
           background: 'var(--bg)',
         }}>
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
+            {/* Model Selector - Like ChatGPT/Claude */}
+            <div style={{ marginBottom: 10 }}>
+              <ModelSelector
+                model={model} setModel={setModel}
+                mode={mode} setMode={setMode}
+                serverProviders={serverProviders}
+              />
+            </div>
+            
             <div className="chat-input-box" style={{
               display: 'flex', gap: 8, alignItems: 'flex-end',
               background: 'var(--bg-secondary)',
@@ -601,16 +607,21 @@ export default function ChatPage() {
             border-radius: 8px !important;
           }
           .chat-input-container {
-            padding: 10px !important;
+            padding: 8px !important;
           }
           .chat-input-box {
-            padding: 8px 8px 8px 12px !important;
+            padding: 6px 6px 6px 10px !important;
           }
           .message-container {
             padding: 16px 12px !important;
           }
           .header-title {
             font-size: 16px !important;
+          }
+          /* Model selector compact on mobile */
+          .model-selector {
+            font-size: 12px !important;
+            padding: 6px 10px !important;
           }
         }
       `}</style>
