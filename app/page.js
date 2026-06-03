@@ -19,6 +19,15 @@ export default function ChatPage() {
   const [activeChatId, setActiveChatId] = useState(null)
   const [model, setModel] = useState(DEFAULT_MODEL)
   const [mode, setMode] = useState(DEFAULT_MODE)
+  
+  // Reset model when mode changes
+  useEffect(() => {
+    const allModels = getAllModels()
+    const availableModels = allModels.filter((m) => m.modes?.includes(mode))
+    if (availableModels.length > 0) {
+      setModel(availableModels[0].id)
+    }
+  }, [mode])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
