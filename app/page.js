@@ -41,10 +41,17 @@ export default function ChatPage() {
       setAuthLoading(false)
       
       if (currentUser) {
+        console.log('User logged in:', currentUser.uid)
         // Load chats from Firestore once (no real-time subscription)
         const userChats = await loadChats(currentUser.uid)
+        console.log('Loaded chats:', userChats.length)
         setChats(userChats)
+        // Set active chat to most recent if available
+        if (userChats.length > 0) {
+          setActiveChatId(userChats[0].id)
+        }
       } else {
+        console.log('User logged out, using localStorage')
         // No user - use localStorage (fallback)
         const savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
         setChats(savedChats)
@@ -98,26 +105,26 @@ export default function ChatPage() {
   }
 
   const newChat = useCallback(async () => {
-    const localId = genId()
-    let chatId = localId
-    let chat = { id: localId, title: 'Chat baru', messages: [], model, mode }
+    const chatId = genId()
+    const chat = { id: chatId, title: 'Chat baru', messages: [], model, mode, firestoreId: null }
     
-    // Save to Firestore first if logged in
+    // Add to local state FIRST (so UI responds immediately)
+    setChats((prev) => [chat, ...prev])
+    setActiveChatId(chatId)
+    setInput('')
+    
+    // Then save to Firestore if logged in (async, doesn't block UI)
     if (user) {
       try {
         console.log('Creating new chat for user:', user.uid)
         const firestoreId = await saveChat(user.uid, { ...chat, userId: user.uid })
-        chatId = firestoreId // Use Firestore ID for everything
-        chat = { ...chat, id: firestoreId }
         console.log('Chat created with Firestore ID:', firestoreId)
+        // Store Firestore ID for future updates, but keep local ID for UI
+        setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, firestoreId } : c)))
       } catch (error) {
         console.error('Create chat error:', error)
       }
     }
-    
-    setChats((prev) => [chat, ...prev])
-    setActiveChatId(chatId) // Use the correct ID (Firestore or local)
-    setInput('')
   }, [model, mode, user])
 
   const deleteChat = async (id) => {
@@ -145,8 +152,9 @@ export default function ChatPage() {
     // Save to Firestore if logged in
     if (user && updatedChat.messages?.length > 0) {
       try {
-        console.log('Updating chat:', { id, userId: user.uid, messages: updatedChat.messages.length })
-        await updateChatInDb(id, updatedChat)
+        const firestoreId = updatedChat.firestoreId || id
+        console.log('Updating chat:', { id, firestoreId, userId: user.uid, messages: updatedChat.messages.length })
+        await updateChatInDb(firestoreId, updatedChat)
         console.log('Chat updated in Firestore')
       } catch (error) {
         console.error('Update chat error:', error.message)
@@ -440,7 +448,7 @@ export default function ChatPage() {
 
         {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0' }}>
-          {!activeChat || activeChat.messages.length === 0 ? (
+          {!activeChat || !activeChat.messages || activeChat.messages.length === 0 ? (
             <EmptyState mode={mode} onSuggestion={(s) => { setInput(s); textareaRef.current?.focus() }} />
           ) : (
             <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 16px' }}>
