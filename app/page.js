@@ -88,13 +88,27 @@ export default function ChatPage() {
     document.documentElement.classList.toggle('dark', next)
   }
 
-  const newChat = useCallback(() => {
-    const chatId = genId()
-    const chat = { id: chatId, title: 'Chat baru', messages: [], model, mode }
+  const newChat = useCallback(async () => {
+    const localId = genId()
+    const chat = { id: localId, title: 'Chat baru', messages: [], model, mode, isLocal: true }
     setChats((prev) => [chat, ...prev])
-    setActiveChatId(chatId)
+    setActiveChatId(localId)
     setInput('')
-  }, [model, mode])
+    
+    // Save to Supabase if logged in
+    if (user) {
+      try {
+        const savedChat = await saveChat(user.id, { title: 'Chat baru', messages: [], model, mode })
+        // Update local chat with Supabase UUID
+        setChats((prev) => prev.map((c) => 
+          c.id === localId ? { ...savedChat, isLocal: false } : c
+        ))
+        setActiveChatId(savedChat.id)
+      } catch (error) {
+        console.error('Error saving chat:', error)
+      }
+    }
+  }, [model, mode, user])
 
   const deleteChatFromDb = async (id) => {
     try {
@@ -113,12 +127,18 @@ export default function ChatPage() {
     const chat = chats.find((c) => c.id === id)
     if (!chat) return
     
+    // Skip if chat is local (waiting for Supabase ID)
+    if (chat.isLocal) {
+      setChats((prev) => prev.map((c) => (c.id === id ? updater(c) : c)))
+      return
+    }
+    
     const updatedChat = updater(chat)
     
     // Update local state first (optimistic)
     setChats((prev) => prev.map((c) => (c.id === id ? updatedChat : c)))
     
-    // Sync to Supabase (debounced)
+    // Sync to Supabase
     if (user) {
       try {
         await updateChat(id, {
@@ -138,17 +158,24 @@ export default function ChatPage() {
     if (!text || isLoading) return
 
     let chatId = activeChatId
-    if (!chatId) {
-      const id = genId()
-      const chat = { id, title: genTitle(text), messages: [], model, mode }
+    let chat = chats.find((c) => c.id === chatId)
+    
+    if (!chatId || !chat) {
+      const localId = genId()
+      chat = { id: localId, title: genTitle(text), messages: [], model, mode, isLocal: true }
       setChats((prev) => [chat, ...prev])
-      setActiveChatId(id)
-      chatId = id
+      setActiveChatId(localId)
+      chatId = localId
       
-      // Save new chat to Supabase
+      // Save to Supabase if logged in
       if (user) {
         try {
-          await saveChat(user.id, { title: genTitle(text), messages: [], model, mode })
+          const savedChat = await saveChat(user.id, { title: genTitle(text), messages: [], model, mode })
+          setChats((prev) => prev.map((c) => 
+            c.id === localId ? { ...savedChat, isLocal: false } : c
+          ))
+          chatId = savedChat.id
+          chat = savedChat
         } catch (error) {
           console.error('Error saving chat:', error)
         }
