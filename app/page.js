@@ -426,10 +426,10 @@ export default function ChatPage() {
       )}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        <div style={{
-          padding: '12px 16px',
+        <div className="header-title" style={{
+          padding: '10px 14px',
           borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center', gap: 12,
+          display: 'flex', alignItems: 'center', gap: 10,
           background: 'var(--bg)',
         }}>
           <button
@@ -519,17 +519,17 @@ export default function ChatPage() {
           )}
         </div>
 
-        <div style={{
-          padding: '12px 16px 16px',
+        <div className="chat-input-container" style={{
+          padding: '10px 14px 14px',
           borderTop: '1px solid var(--border)',
           background: 'var(--bg)',
         }}>
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
-            <div style={{
+            <div className="chat-input-box" style={{
               display: 'flex', gap: 8, alignItems: 'flex-end',
               background: 'var(--bg-secondary)',
               border: '1px solid var(--border)',
-              borderRadius: 12, padding: '8px 8px 8px 14px',
+              borderRadius: 12, padding: '8px 8px 8px 12px',
             }}>
               {mode === 'image' && (
                 <ImageIcon size={16} style={{ color: 'var(--text-muted)', marginBottom: 10, flexShrink: 0 }} />
@@ -592,6 +592,26 @@ export default function ChatPage() {
           .sidebar-desktop { display: none !important; }
           .mobile-menu-btn { display: flex !important; }
           .desktop-only { display: none; }
+          
+          /* Mobile optimizations */
+          .empty-state-suggestions { gap: 10px !important; }
+          .empty-state-suggestions button {
+            padding: 12px 14px !important;
+            font-size: 13px !important;
+            border-radius: 8px !important;
+          }
+          .chat-input-container {
+            padding: 10px !important;
+          }
+          .chat-input-box {
+            padding: 8px 8px 8px 12px !important;
+          }
+          .message-container {
+            padding: 16px 12px !important;
+          }
+          .header-title {
+            font-size: 16px !important;
+          }
         }
       `}</style>
     </div>
@@ -641,23 +661,23 @@ function EmptyState({ mode, onSuggestion }) {
   }
 
   return (
-    <div style={{ textAlign: 'center', padding: '60px 24px', maxWidth: 560, margin: '0 auto' }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>
+    <div style={{ textAlign: 'center', padding: '40px 20px', maxWidth: 560, margin: '0 auto' }}>
+      <div style={{ fontSize: 36, marginBottom: 10 }}>
         {mode === 'chat' ? '💬' : mode === 'coding' ? '💻' : mode === 'reasoning' ? '🧠' : '🎨'}
       </div>
-      <h2 style={{ fontWeight: 600, fontSize: 22, margin: '0 0 8px' }}>
+      <h2 style={{ fontWeight: 600, fontSize: 20, margin: '0 0 6px' }}>
         {mode === 'chat' ? 'Mulai ngobrol' : mode === 'coding' ? 'Coding assistant' : mode === 'reasoning' ? 'Penalaran mendalam' : 'Generate gambar'}
       </h2>
-      <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: '0 0 28px' }}>
+      <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: '0 0 24px' }}>
         {mode === 'chat' ? 'Tanya apa saja' : mode === 'coding' ? 'Bantu debug, review, atau tulis kode' : mode === 'reasoning' ? 'Analisis masalah kompleks langkah demi langkah' : 'Deskripsikan gambar yang ingin dibuat'}
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="empty-state-suggestions" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {(suggestions[mode] || []).map((s) => (
           <button
             key={s}
             onClick={() => onSuggestion(s)}
             style={{
-              padding: '10px 16px', background: 'var(--bg-secondary)',
+              padding: '10px 14px', background: 'var(--bg-secondary)',
               border: '1px solid var(--border)', borderRadius: 10,
               cursor: 'pointer', color: 'var(--text)', fontSize: 13,
               textAlign: 'left', transition: 'border-color 0.15s',
