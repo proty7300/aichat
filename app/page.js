@@ -24,7 +24,10 @@ export default function ChatPage() {
   useEffect(() => {
     const allModels = getAllModels()
     const availableModels = allModels.filter((m) => m.modes?.includes(mode))
+    console.log('Mode changed to:', mode)
+    console.log('Available models for this mode:', availableModels.map(m => `${m.providerName} — ${m.name}`))
     if (availableModels.length > 0) {
+      console.log('Setting model to:', availableModels[0].id)
       setModel(availableModels[0].id)
     }
   }, [mode])
