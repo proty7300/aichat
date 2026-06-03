@@ -14,7 +14,22 @@ export async function POST(req) {
       const lastMsg = messages[messages.length - 1]?.content || ''
       let result
 
-      if (providerId === 'google') {
+      // Use provider-specific image generation
+      if (providerId === 'generalcompute') {
+        // General Compute image generation (DALL-E 3, SDXL)
+        const apiKey = overrideKey || process.env.GENERAL_COMPUTE_API_KEY
+        if (!apiKey) {
+          throw new Error('General Compute API key tidak ditemukan. Set di Settings.')
+        }
+        result = await generateImage({ prompt: lastMsg, apiKey, model })
+        return Response.json({
+          type: 'image',
+          url: result.url,
+          revisedPrompt: result.revised_prompt,
+          prompt: lastMsg,
+          model: model,
+        })
+      } else if (providerId === 'google') {
         const apiKey = overrideKey || process.env.GOOGLE_API_KEY
         if (!apiKey) throw new Error('Google API key tidak ditemukan')
         result = await generateImageGoogle({ prompt: lastMsg, apiKey })
@@ -24,14 +39,16 @@ export async function POST(req) {
           prompt: lastMsg,
         })
       } else {
+        // Default to OpenAI
         const apiKey = overrideKey || process.env.OPENAI_API_KEY
         if (!apiKey) throw new Error('OpenAI API key tidak ditemukan')
-        result = await generateImage({ prompt: lastMsg, apiKey })
+        result = await generateImage({ prompt: lastMsg, apiKey, model })
         return Response.json({
           type: 'image',
           url: result.url,
           revisedPrompt: result.revised_prompt,
           prompt: lastMsg,
+          model: model,
         })
       }
     }
