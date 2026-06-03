@@ -18,10 +18,11 @@ export async function POST(req) {
       if (providerId === 'generalcompute') {
         // General Compute image generation (DALL-E 3, SDXL)
         const apiKey = overrideKey || process.env.GENERAL_COMPUTE_API_KEY
+        const baseUrl = process.env.GENERAL_COMPUTE_BASE_URL || 'https://api.generalcompute.com'
         if (!apiKey) {
           throw new Error('General Compute API key tidak ditemukan. Set di Settings.')
         }
-        result = await generateImage({ prompt: lastMsg, apiKey, model })
+        result = await generateImage({ prompt: lastMsg, apiKey, model, baseUrl })
         return Response.json({
           type: 'image',
           url: result.url,
