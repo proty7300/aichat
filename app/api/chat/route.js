@@ -132,7 +132,12 @@ export async function POST(req) {
         Connection: 'keep-alive',
       },
     })
+    } catch (err) {
+      console.error('Stream processing error:', err)
+      return Response.json({ error: err.message }, { status: 500 })
+    }
   } catch (err) {
+    console.error('Main handler error:', err)
     return Response.json({ error: err.message }, { status: 500 })
   }
 }
