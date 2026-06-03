@@ -27,6 +27,7 @@ export default function ChatPage() {
   const [serverProviders, setServerProviders] = useState([])
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [hasLoadedChats, setHasLoadedChats] = useState(false)
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
@@ -40,25 +41,30 @@ export default function ChatPage() {
       setUser(currentUser)
       setAuthLoading(false)
       
-      if (currentUser) {
-        console.log('User logged in:', currentUser.uid)
-        // Load chats from Firestore once (no real-time subscription)
+      if (currentUser && !hasLoadedChats) {
+        console.log('User logged in, loading chats from Firestore')
+        // Load chats from Firestore ONCE (first time login)
         const userChats = await loadChats(currentUser.uid)
         console.log('Loaded chats:', userChats.length)
         setChats(userChats)
+        setHasLoadedChats(true)
         // Set active chat to most recent if available
         if (userChats.length > 0) {
           setActiveChatId(userChats[0].id)
         }
-      } else {
+      } else if (!currentUser && !hasLoadedChats) {
         console.log('User logged out, using localStorage')
         // No user - use localStorage (fallback)
         const savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
         setChats(savedChats)
+        setHasLoadedChats(true)
+        if (savedChats.length > 0) {
+          setActiveChatId(savedChats[0].id)
+        }
       }
     })
     return () => unsubscribe()
-  }, [])
+  }, [hasLoadedChats])
 
   // Save chats to localStorage when not logged in
   useEffect(() => {
