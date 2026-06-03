@@ -43,10 +43,39 @@ export default function ChatPage() {
       if (currentUser) {
         // Subscribe to user's chats from Firestore
         unsubscribeRef.current = subscribeToChats(currentUser.uid, (userChats) => {
-          setChats(userChats.map(chat => ({
-            ...chat,
-            messages: chat.messages || [],
-          })))
+          // Merge Firestore chats with local state
+          setChats(prevChats => {
+            // Create map of Firestore chats by ID
+            const firestoreChatMap = new Map()
+            userChats.forEach(chat => {
+              firestoreChatMap.set(chat.id, {
+                ...chat,
+                messages: chat.messages || [],
+              })
+            })
+            
+            // Merge: prefer Firestore data, but keep local chats that aren't in Firestore yet
+            const mergedChats = []
+            const seenIds = new Set()
+            
+            // Add all Firestore chats
+            userChats.forEach(chat => {
+              mergedChats.push({
+                ...chat,
+                messages: chat.messages || [],
+              })
+              seenIds.add(chat.id)
+            })
+            
+            // Add local chats not in Firestore (new chats being created)
+            prevChats.forEach(chat => {
+              if (!seenIds.has(chat.id)) {
+                mergedChats.push(chat)
+              }
+            })
+            
+            return mergedChats
+          })
         })
       } else {
         // No user - use localStorage (fallback)
