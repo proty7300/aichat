@@ -98,15 +98,17 @@ export default function ChatPage() {
   }
 
   const newChat = useCallback(async () => {
-    const id = genId()
-    const chat = { id, title: 'Chat baru', messages: [], model, mode }
+    const localId = genId()
+    let chatId = localId
+    let chat = { id: localId, title: 'Chat baru', messages: [], model, mode }
     
     // Save to Firestore first if logged in
     if (user) {
       try {
         console.log('Creating new chat for user:', user.uid)
         const firestoreId = await saveChat(user.uid, { ...chat, userId: user.uid })
-        chat.id = firestoreId // Use Firestore ID
+        chatId = firestoreId // Use Firestore ID for everything
+        chat = { ...chat, id: firestoreId }
         console.log('Chat created with Firestore ID:', firestoreId)
       } catch (error) {
         console.error('Create chat error:', error)
@@ -114,7 +116,7 @@ export default function ChatPage() {
     }
     
     setChats((prev) => [chat, ...prev])
-    setActiveChatId(id)
+    setActiveChatId(chatId) // Use the correct ID (Firestore or local)
     setInput('')
   }, [model, mode, user])
 
