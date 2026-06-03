@@ -1,13 +1,14 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Menu, X, Moon, Sun, Download, Image as ImageIcon } from 'lucide-react'
+import { Send, Menu, X, Moon, Sun, Download, Image as ImageIcon, LogIn, LogOut, User } from 'lucide-react'
 import MessageRenderer from '@/components/MessageRenderer'
 import ModelSelector from '@/components/ModelSelector'
 import Sidebar from '@/components/Sidebar'
 import SettingsModal, { loadOverrideKeys } from '@/components/SettingsModal'
 import { getAllModels } from '@/lib/models'
+import { signInWithGoogle, logout, onAuthChange, subscribeToChats, saveChat, updateChat as updateChatInDb, deleteChat as deleteChatFromDb } from '@/lib/firebase'
 
-const DEFAULT_MODEL = 'gpt-4o'
+const DEFAULT_MODEL = 'deepseek-v3.2'
 const DEFAULT_MODE = 'chat'
 
 function genId() { return Math.random().toString(36).slice(2, 10) }
@@ -24,28 +25,59 @@ export default function ChatPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [dark, setDark] = useState(false)
   const [serverProviders, setServerProviders] = useState([])
+  const [user, setUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
+  const unsubscribeRef = useRef(null)
 
   const activeChat = chats.find((c) => c.id === activeChatId)
 
-  // Load state from localStorage
+  // Auth state listener
   useEffect(() => {
-    const savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
+    const unsubscribe = onAuthChange((currentUser) => {
+      setUser(currentUser)
+      setAuthLoading(false)
+      
+      if (currentUser) {
+        // Subscribe to user's chats from Firestore
+        unsubscribeRef.current = subscribeToChats(currentUser.uid, (userChats) => {
+          setChats(userChats.map(chat => ({
+            ...chat,
+            messages: chat.messages || [],
+          })))
+        })
+      } else {
+        // No user - use localStorage (fallback)
+        if (unsubscribeRef.current) unsubscribeRef.current()
+        const savedChats = JSON.parse(localStorage.getItem('ai_chats') || '[]')
+        setChats(savedChats)
+      }
+    })
+    return () => unsubscribe()
+  }, [])
+
+  // Save chats to Firestore or localStorage
+  useEffect(() => {
+    if (authLoading) return
+    
+    if (user) {
+      // Save to Firestore (handled by individual save/update calls)
+    } else {
+      // Save to localStorage
+      localStorage.setItem('ai_chats', JSON.stringify(chats))
+    }
+  }, [chats, user, authLoading])
+
+  useEffect(() => {
     const savedDark = localStorage.getItem('ai_dark') === 'true'
-    setChats(savedChats)
     setDark(savedDark)
-    if (savedChats.length > 0) setActiveChatId(savedChats[0].id)
     document.documentElement.classList.toggle('dark', savedDark)
 
     // Fetch available server providers
     fetch('/api/models').then((r) => r.json()).then(setServerProviders).catch(() => {})
   }, [])
-
-  useEffect(() => {
-    localStorage.setItem('ai_chats', JSON.stringify(chats))
-  }, [chats])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -58,6 +90,24 @@ export default function ChatPage() {
     document.documentElement.classList.toggle('dark', next)
   }
 
+  const handleSignIn = async () => {
+    try {
+      await signInWithGoogle()
+    } catch (error) {
+      console.error('Sign in error:', error)
+      alert('Login gagal: ' + error.message)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+      // Chats will switch to localStorage mode
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
+  }
+
   const newChat = useCallback(() => {
     const id = genId()
     const chat = { id, title: 'Chat baru', messages: [], model, mode }
@@ -66,15 +116,31 @@ export default function ChatPage() {
     setInput('')
   }, [model, mode])
 
-  const deleteChat = (id) => {
-    setChats((prev) => prev.filter((c) => c.id !== id))
+  const deleteChat = async (id) => {
+    if (user) {
+      try {
+        await deleteChatFromDb(id)
+      } catch (error) {
+        console.error('Delete error:', error)
+      }
+    } else {
+      setChats((prev) => prev.filter((c) => c.id !== id))
+    }
     if (activeChatId === id) {
       setActiveChatId(chats.find((c) => c.id !== id)?.id || null)
     }
   }
 
   const updateChat = (id, updater) => {
-    setChats((prev) => prev.map((c) => (c.id === id ? updater(c) : c)))
+    setChats((prev) => prev.map((c) => {
+      if (c.id !== id) return c
+      const updated = updater(c)
+      // Save to Firestore if logged in
+      if (user && updated.messages?.length > 0) {
+        updateChatInDb(id, updated).catch(console.error)
+      }
+      return updated
+    }))
   }
 
   const sendMessage = async () => {
@@ -108,7 +174,7 @@ export default function ChatPage() {
     // Find provider for current model
     const allModels = getAllModels()
     const modelInfo = allModels.find((m) => m.id === model)
-    const providerId = modelInfo?.provider || 'openai'
+    const providerId = modelInfo?.provider || 'generalcompute'
     const overrideKey = overrideKeys[providerId] || ''
 
     const history = (chats.find((c) => c.id === chatId)?.messages || [])
@@ -232,6 +298,15 @@ export default function ChatPage() {
     URL.revokeObjectURL(url)
   }
 
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
+        <div>Loading...</div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
       {/* Sidebar — desktop */}
@@ -288,7 +363,7 @@ export default function ChatPage() {
             serverProviders={serverProviders}
           />
 
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
             {activeChat?.messages.length > 0 && (
               <button onClick={exportChat} title="Export chat" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 6 }}>
                 <Download size={16} />
@@ -297,6 +372,58 @@ export default function ChatPage() {
             <button onClick={toggleDark} title="Toggle dark mode" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 6 }}>
               {dark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
+            
+            {/* User Auth Button */}
+            {user ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text)' }}>
+                  <User size={14} />
+                  <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user.displayName || user.email}
+                  </span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  title="Logout"
+                  style={{
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 12,
+                  }}
+                >
+                  <LogOut size={14} />
+                  <span className="desktop-only">Logout</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleSignIn}
+                title="Login dengan Google"
+                style={{
+                  background: '#4285f4',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '6px 14px',
+                  cursor: 'pointer',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                }}
+              >
+                <LogIn size={14} />
+                <span className="desktop-only">Login</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -372,6 +499,11 @@ export default function ChatPage() {
             <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
               AI bisa membuat kesalahan. Periksa informasi penting.
             </p>
+            {!user && (
+              <p style={{ margin: '8px 0 0', fontSize: 11, color: '#f59e0b', textAlign: 'center' }}>
+                💡 Login untuk menyimpan chat secara permanen di cloud
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -382,6 +514,7 @@ export default function ChatPage() {
         @media (max-width: 640px) {
           .sidebar-desktop { display: none !important; }
           .mobile-menu-btn { display: flex !important; }
+          .desktop-only { display: none; }
         }
       `}</style>
     </div>
