@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { PROVIDERS, MODES, getModelsByMode } from '@/lib/models'
 
@@ -8,6 +8,15 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
   const [openMode, setOpenMode] = useState(false)
 
   const availableModels = getModelsByMode(mode)
+  
+  // Reset model when mode changes
+  useEffect(() => {
+    const firstModel = availableModels[0]
+    if (firstModel && model !== firstModel.id) {
+      setModel(firstModel.id)
+    }
+  }, [mode, availableModels, model, setModel])
+  
   const currentModel = availableModels.find((m) => m.id === model) || availableModels[0]
   const currentMode = MODES[mode]
 
