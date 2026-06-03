@@ -121,11 +121,10 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
                   {models.map((m) => (
                     <button
                       key={m.id}
-                      onMouseDown={(e) => {
-                        e.preventDefault()
+                      onClick={(e) => {
                         e.stopPropagation()
                         setModel(m.id)
-                        setOpenModel(false)
+                        setTimeout(() => setOpenModel(false), 50)
                       }}
                       style={{
                         width: '100%', padding: '10px 16px',
