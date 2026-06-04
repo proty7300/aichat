@@ -9,13 +9,14 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
 
   const availableModels = getModelsByMode(mode)
   
-  // Reset model when mode changes
+  // Reset model HANYA ketika mode berubah, bukan ketika model berubah
   useEffect(() => {
-    const firstModel = availableModels[0]
-    if (firstModel && model !== firstModel.id) {
-      setModel(firstModel.id)
+    const ids = availableModels.map(m => m.id)
+    // Kalau model yang dipilih tidak tersedia di mode ini, reset ke yang pertama
+    if (!ids.includes(model) && availableModels.length > 0) {
+      setModel(availableModels[0].id)
     }
-  }, [mode, availableModels, model, setModel])
+  }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
   
   const currentModel = availableModels.find((m) => m.id === model) || availableModels[0]
   const currentMode = MODES[mode]
