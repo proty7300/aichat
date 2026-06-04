@@ -269,22 +269,8 @@ export default function ChatPage() {
       const controller = new AbortController()
       abortRef.current = controller
 
-      // ── Free Image Gen: generate gambar langsung di browser via Puter.js ──
+      // ── Free Image Gen via Puter.js (client-side) ──
       if (providerId === 'pollinations' && mode === 'image') {
-        const prompt = text
-
-        // Load puter.js jika belum ada
-        if (!window.puter) {
-          await new Promise((resolve, reject) => {
-            const script = document.createElement('script')
-            script.src = 'https://js.puter.com/v2/'
-            script.onload = () => setTimeout(resolve, 500)
-            script.onerror = reject
-            document.head.appendChild(script)
-          })
-        }
-
-        // Map model ID ke Puter model string
         const puterModelMap = {
           'flux': 'black-forest-labs/FLUX.1-schnell',
           'turbo': 'stabilityai/sdxl-turbo',
@@ -295,36 +281,41 @@ export default function ChatPage() {
         }
         const puterModel = puterModelMap[model] || 'black-forest-labs/FLUX.1-schnell'
 
-        const imgEl = await window.puter.ai.txt2img(prompt, { model: puterModel })
-        
-        // Puter.js return HTMLImageElement
-        // Kalau src adalah blob, fetch dan convert ke base64
-        let imgSrc = imgEl.src || ''
-        
-        if (imgSrc.startsWith('blob:')) {
-          try {
-            const blobRes = await fetch(imgSrc)
-            const blob = await blobRes.blob()
-            imgSrc = await new Promise((res, rej) => {
-              const reader = new FileReader()
-              reader.onload = (e) => res(e.target.result)
-              reader.onerror = rej
-              reader.readAsDataURL(blob)
-            })
-          } catch (fetchErr) {
-            console.error('blob fetch error:', fetchErr)
-          }
+        if (!window.puter) {
+          await new Promise(function(resolve, reject) {
+            var script = document.createElement('script')
+            script.src = 'https://js.puter.com/v2/'
+            script.onload = function() { setTimeout(resolve, 500) }
+            script.onerror = reject
+            document.head.appendChild(script)
+          })
         }
-        
-        if (!imgSrc) throw new Error('Tidak bisa mengambil gambar dari Puter.js')
 
-        const imgContent = `![Generated image](${imgSrc})\n\n*Prompt: ${prompt}*`
-        updateChatInDb(chatId, (c) => ({
-          ...c,
-          messages: c.messages.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: imgContent, isStreaming: false } : m
-          ),
-        }))
+        var imgEl = await window.puter.ai.txt2img(text, { model: puterModel })
+        var imgSrc = imgEl.src || ''
+
+        if (imgSrc.startsWith('blob:')) {
+          var blobRes = await fetch(imgSrc)
+          var blob = await blobRes.blob()
+          imgSrc = await new Promise(function(res, rej) {
+            var reader = new FileReader()
+            reader.onload = function(e) { res(e.target.result) }
+            reader.onerror = rej
+            reader.readAsDataURL(blob)
+          })
+        }
+
+        if (!imgSrc) throw new Error('Puter.js tidak mengembalikan gambar')
+
+        var imgContent = '![Generated image](' + imgSrc + ')\n\n*Prompt: ' + text + '*'
+        updateChatInDb(chatId, function(c) {
+          return {
+            ...c,
+            messages: c.messages.map(function(m) {
+              return m.id === assistantMsg.id ? { ...m, content: imgContent, isStreaming: false } : m
+            }),
+          }
+        })
         setIsLoading(false)
         return
       }
@@ -418,7 +409,7 @@ export default function ChatPage() {
         ...c,
         messages: c.messages.map((m) =>
           m.id === assistantMsg.id
-            ? { ...m, content: `❌ Error: ${err.message === "Failed to fetch" ? "Koneksi gagal - cek API key atau coba lagi" : err.message}`, isStreaming: false }
+            ? { ...m, content: `❌ Error: ${err.message}`, isStreaming: false }
             : m
         ),
       }))
