@@ -296,8 +296,38 @@ export default function ChatPage() {
         const puterModel = puterModelMap[model] || 'black-forest-labs/FLUX.1-schnell'
 
         const imgEl = await window.puter.ai.txt2img(prompt, { model: puterModel })
-        const imgSrc = imgEl.src || imgEl.getAttribute('src')
-        if (!imgSrc) throw new Error('Puter.js tidak mengembalikan gambar')
+        
+        // Puter.js return HTMLImageElement - extract src berbagai cara
+        let imgSrc = null
+        if (imgEl && imgEl.src) imgSrc = imgEl.src
+        else if (imgEl && imgEl.getAttribute) imgSrc = imgEl.getAttribute('src')
+        
+        // Kalau blob URL atau tidak ada src, convert ke base64 via fetch
+        if (!imgSrc || imgSrc.startsWith('blob:') || imgSrc === '') {
+          if (imgEl.complete && imgEl.naturalWidth > 0) {
+            // Gambar sudah load, gunakan canvas
+            const canvas = document.createElement('canvas')
+            canvas.width = imgEl.naturalWidth
+            canvas.height = imgEl.naturalHeight
+            try {
+              canvas.getContext('2d').drawImage(imgEl, 0, 0)
+              imgSrc = canvas.toDataURL('image/png')
+            } catch {
+              // Canvas tainted, coba fetch blob
+            }
+          }
+          if ((!imgSrc || imgSrc === 'data:,') && imgEl.src?.startsWith('blob:')) {
+            const blobRes = await fetch(imgEl.src)
+            const blob = await blobRes.blob()
+            imgSrc = await new Promise(res => {
+              const reader = new FileReader()
+              reader.onload = e => res(e.target.result)
+              reader.readAsDataURL(blob)
+            })
+          }
+        }
+        
+        if (!imgSrc) throw new Error('Tidak bisa mengambil gambar dari Puter.js')
 
         const imgContent = `![Generated image](${imgSrc})\n\n*Prompt: ${prompt}*`
         updateChatInDb(chatId, (c) => ({
