@@ -1,4 +1,4 @@
-import { streamChat, generateImage, generateImageGoogle, parseOpenAIStream } from '@/lib/llm'
+import { streamChat, generateImage, generateImageGoogle, generateImagePollinations, parseOpenAIStream } from '@/lib/llm'
 
 // REMOVED: export const runtime = 'edge'
 // Edge runtime has ~25s timeout which causes "Streaming request failed"
@@ -17,7 +17,17 @@ export async function POST(req) {
       const lastMsg = messages[messages.length - 1]?.content || ''
       let result
 
-      if (providerId === 'generalcompute') {
+      // Pollinations - tidak perlu API key
+      if (providerId === 'pollinations') {
+        result = await generateImagePollinations({ prompt: lastMsg, model })
+        return Response.json({
+          type: 'image',
+          url: result.url,
+          revisedPrompt: result.revised_prompt,
+          prompt: lastMsg,
+          model,
+        })
+      } else if (providerId === 'generalcompute') {
         const apiKey = overrideKey || process.env.GENERAL_COMPUTE_API_KEY
         const baseUrl = process.env.GENERAL_COMPUTE_BASE_URL || 'https://api.generalcompute.com'
         if (!apiKey) throw new Error('General Compute API key tidak ditemukan. Set di Settings.')
