@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Menu, X, Moon, Sun, Download, Image as ImageIcon, LogIn, LogOut, User } from 'lucide-react'
+import { Send, Menu, X, Moon, Sun, Download, Image as ImageIcon, LogIn, LogOut, User, Paperclip } from 'lucide-react'
 import MessageRenderer from '@/components/MessageRenderer'
 import ModelSelector from '@/components/ModelSelector'
 import Sidebar from '@/components/Sidebar'
@@ -43,6 +43,8 @@ export default function ChatPage() {
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
+  const [attachedFile, setAttachedFile] = useState(null) // { name, content, type }
+  const fileInputRef = useRef(null)
 
   const activeChat = chats.find((c) => c.id === activeChatId) || null
   
@@ -200,9 +202,42 @@ export default function ChatPage() {
     }
   }
 
+  const handleFileAttach = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const name = file.name
+    const ext = name.split('.').pop().toLowerCase()
+    
+    if (ext === 'zip') {
+      // Untuk zip, simpan sebagai binary info saja
+      setAttachedFile({ name, content: null, type: 'zip', size: file.size })
+      e.target.value = ''
+      return
+    }
+    
+    // Baca file teks (py, js, ts, txt, md, json, css, html, dll)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setAttachedFile({ name, content: ev.target.result, type: ext })
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
   const sendMessage = async () => {
     const text = input.trim()
-    if (!text || isLoading) return
+    if (!text && !attachedFile || isLoading) return
+
+    // Gabungkan input dengan konten file jika ada
+    let fullText = text
+    if (attachedFile) {
+      if (attachedFile.content) {
+        fullText = (text ? text + '\n\n' : '') + `File: **${attachedFile.name}**\n\`\`\`${attachedFile.type}\n${attachedFile.content}\n\`\`\``
+      } else {
+        fullText = (text ? text + '\n\n' : '') + `[File zip terlampir: **${attachedFile.name}** (${(attachedFile.size/1024).toFixed(1)} KB) — tidak bisa dibaca langsung, tolong jelaskan isi atau tujuannya]`
+      }
+      setAttachedFile(null)
+    }
 
     let chatId = activeChatId
     let chat = chats.find((c) => c.id === chatId)
@@ -211,7 +246,7 @@ export default function ChatPage() {
     
     if (!chatId || !chat) {
       const localId = genId()
-      chat = { id: localId, title: genTitle(text), messages: [], model, mode, isLocal: true }
+      chat = { id: localId, title: genTitle(fullText), messages: [], model, mode, isLocal: true }
       setChats((prev) => [chat, ...prev])
       setActiveChatId(localId)
       chatId = localId
@@ -237,7 +272,7 @@ export default function ChatPage() {
       console.log('Using existing chat:', chat.id, chat.isLocal)
     }
 
-    const userMsg = { id: genId(), role: 'user', content: text }
+    const userMsg = { id: genId(), role: 'user', content: fullText }
     const assistantMsg = { id: genId(), role: 'assistant', content: '', isStreaming: true }
 
     updateChatInDb(chatId, (c) => ({
@@ -628,6 +663,46 @@ export default function ChatPage() {
               {mode === 'image' && (
                 <ImageIcon size={16} style={{ color: 'var(--text-muted)', marginBottom: 10, flexShrink: 0 }} />
               )}
+              {mode !== 'image' && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".py,.js,.ts,.jsx,.tsx,.txt,.md,.json,.css,.html,.zip,.csv,.yaml,.yml,.sh,.env,.toml,.rs,.go,.java,.cpp,.c,.rb"
+                    style={{ display: 'none' }}
+                    onChange={handleFileAttach}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Lampirkan file"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: attachedFile ? 'var(--accent)' : 'var(--text-muted)',
+                      padding: '4px', marginBottom: 6, flexShrink: 0,
+                      display: 'flex', alignItems: 'center',
+                    }}
+                  >
+                    <Paperclip size={16} />
+                  </button>
+                </>
+              )}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {attachedFile && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'var(--bg)', borderRadius: 6, padding: '4px 8px',
+                    fontSize: 12, color: 'var(--text-muted)',
+                  }}>
+                    <Paperclip size={12} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachedFile.name}</span>
+                    <button
+                      onClick={() => setAttachedFile(null)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -651,17 +726,18 @@ export default function ChatPage() {
                   maxHeight: 200,
                 }}
               />
+              </div>
               <button
                 onClick={isLoading ? stopGeneration : sendMessage}
-                disabled={!input.trim() && !isLoading}
+                disabled={!input.trim() && !attachedFile && !isLoading}
                 style={{
                   background: isLoading ? '#ef4444' : 'var(--accent)',
                   border: 'none', borderRadius: 8,
                   width: 36, height: 36, flexShrink: 0,
-                  cursor: (!input.trim() && !isLoading) ? 'not-allowed' : 'pointer',
+                  cursor: (!input.trim() && !attachedFile && !isLoading) ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: 'var(--user-text)',
-                  opacity: (!input.trim() && !isLoading) ? 0.4 : 1,
+                  opacity: (!input.trim() && !attachedFile && !isLoading) ? 0.4 : 1,
                 }}
               >
                 {isLoading ? <X size={16} /> : <Send size={15} />}
