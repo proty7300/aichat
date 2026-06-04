@@ -22,8 +22,7 @@ export async function POST(req) {
         result = await generateImagePollinations({ prompt: lastMsg, model })
         return Response.json({
           type: 'image',
-          url: result.url,
-          revisedPrompt: result.revised_prompt,
+          b64: result.b64,
           prompt: lastMsg,
           model,
         })
