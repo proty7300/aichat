@@ -278,14 +278,24 @@ export default function ChatPage() {
           await new Promise((resolve, reject) => {
             const script = document.createElement('script')
             script.src = 'https://js.puter.com/v2/'
-            script.onload = () => setTimeout(resolve, 500) // tunggu init
+            script.onload = () => setTimeout(resolve, 500)
             script.onerror = reject
             document.head.appendChild(script)
           })
         }
 
-        const imgEl = await window.puter.ai.txt2img(prompt, { model: 'black-forest-labs/FLUX.1-schnell' })
-        // Ambil src URL langsung dari img element yang dikembalikan Puter
+        // Map model ID ke Puter model string
+        const puterModelMap = {
+          'flux': 'black-forest-labs/FLUX.1-schnell',
+          'turbo': 'stabilityai/sdxl-turbo',
+          'gpt-image-2': 'openai/gpt-image-2',
+          'google/imagen-4.0-fast': 'google/imagen-4.0-fast',
+          'ideogram/ideogram-3.0': 'ideogram/ideogram-3.0',
+          'qwen/qwen-image-2.0': 'qwen/qwen-image-2.0',
+        }
+        const puterModel = puterModelMap[model] || 'black-forest-labs/FLUX.1-schnell'
+
+        const imgEl = await window.puter.ai.txt2img(prompt, { model: puterModel })
         const imgSrc = imgEl.src || imgEl.getAttribute('src')
         if (!imgSrc) throw new Error('Puter.js tidak mengembalikan gambar')
 
