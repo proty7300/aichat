@@ -1,4 +1,4 @@
-import { streamChat, generateImage, generateImageGoogle, generateImagePollinations, generateImageCloudflare, parseOpenAIStream } from '@/lib/llm'
+import { streamChat, generateImage, generateImageGoogle, generateImagePollinations, generateImageCloudflare, callCloudflareVision, parseOpenAIStream } from '@/lib/llm'
 
 // REMOVED: export const runtime = 'edge'
 // Edge runtime has ~25s timeout which causes "Streaming request failed"
@@ -8,7 +8,7 @@ export const maxDuration = 60 // seconds - increase if on Vercel Pro
 
 export async function POST(req) {
   try {
-    const { messages, providerId, model, modeId, overrideKey } = await req.json()
+    const { messages, providerId, model, modeId, overrideKey, imageBase64 } = await req.json()
 
     console.log('Chat request:', { providerId, model, modeId, hasOverrideKey: !!overrideKey })
 
@@ -68,6 +68,24 @@ export async function POST(req) {
           model,
         })
       }
+    }
+
+    // ── Vision (image analysis) ──
+    if (imageBase64) {
+      const apiToken = overrideKey || process.env.CLOUDFLARE_API_TOKEN
+      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+      if (!apiToken || !accountId) throw new Error('Cloudflare credentials tidak ditemukan')
+      const lastMsg = messages[messages.length - 1]?.content || ''
+      const answer = await callCloudflareVision({
+        prompt: lastMsg,
+        imageBase64,
+        model,
+        apiToken,
+        accountId,
+      })
+      return new Response(`data: ${JSON.stringify({ text: answer })}\n\ndata: [DONE]\n\n`, {
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+      })
     }
 
     // ── Streaming chat ──
