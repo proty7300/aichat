@@ -358,7 +358,7 @@ export default function ChatPage() {
         ...c,
         messages: c.messages.map((m) =>
           m.id === assistantMsg.id
-            ? { ...m, content: `❌ Error: ${err.message}`, isStreaming: false }
+            ? { ...m, content: `❌ Error: ${err.message === "Failed to fetch" ? "Koneksi gagal - cek API key atau coba lagi" : err.message}`, isStreaming: false }
             : m
         ),
       }))
