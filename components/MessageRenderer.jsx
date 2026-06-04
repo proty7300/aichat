@@ -31,6 +31,17 @@ export default function MessageRenderer({ content, isStreaming }) {
               </a>
             )
           },
+          // Render gambar (base64 atau URL eksternal)
+          img({ src, alt }) {
+            return (
+              <img
+                src={src}
+                alt={alt || 'Generated image'}
+                style={{ maxWidth: '100%', borderRadius: 8, marginTop: 8 }}
+                referrerPolicy="no-referrer"
+              />
+            )
+          },
         }}
       >
         {content}
