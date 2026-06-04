@@ -23,14 +23,31 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
 
   const providerHasKey = (providerId) => {
     const provider = Object.values(PROVIDERS).find(p => p.id === providerId)
-    // Provider yang tidak butuh key (free) dianggap selalu "punya key"
     if (provider?.noKeyRequired) return true
-    const override = typeof window !== 'undefined'
-      ? JSON.parse(localStorage.getItem('ai_chat_override_keys') || '{}')[providerId]
-      : null
+    const overrideKeys = typeof window !== 'undefined'
+      ? JSON.parse(localStorage.getItem('ai_chat_override_keys') || '{}')
+      : {}
+    const override = overrideKeys[providerId]
     const serverKey = serverProviders?.find((p) => p.id === providerId)?.hasKey
     return !!(override || serverKey)
   }
+
+  // Determine if a model is the "best available" to show a star indicator
+  const getBestModelId = () => {
+    const overrideKeys = typeof window !== 'undefined'
+      ? JSON.parse(localStorage.getItem('ai_chat_override_keys') || '{}')
+      : {}
+    const priority = ['deepseek-v3.2', 'deepseek-v3.1', 'glm-4.7', 'gpt-oss']
+    for (const id of priority) {
+      const m = availableModels.find(m => m.id === id)
+      if (m) {
+        const hasKey = overrideKeys[m.provider] || serverProviders?.find(p => p.id === m.provider)?.hasKey
+        if (hasKey) return id
+      }
+    }
+    return null
+  }
+  const bestModelId = getBestModelId()
 
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -137,9 +154,14 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
                         color: hasKey ? 'var(--text)' : 'var(--text-muted)',
                         fontSize: 14, opacity: hasKey ? 1 : 0.6,
                         borderBottom: '1px solid var(--border)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       }}
                     >
-                      {m.name}
+                      <span>{m.name}</span>
+                      <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        {m.vision && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>Vision</span>}
+                        {m.id === bestModelId && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(16,185,129,0.15)', color: '#10b981' }}>Auto ✦</span>}
+                      </span>
                     </button>
                   ))}
                 </div>
