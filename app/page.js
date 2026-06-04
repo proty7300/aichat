@@ -156,25 +156,27 @@ export default function ChatPage() {
   }
 
   const updateChatInDb = async (chatId, updater) => {
-    // Get latest chat from state using functional update
-    let chatToUpdate = null
+    // Apply updater and capture the updated chat
+    let updatedChat = null
     setChats((prev) => {
-      chatToUpdate = prev.find((c) => c.id === chatId)
+      const chatToUpdate = prev.find((c) => c.id === chatId)
       if (!chatToUpdate) return prev
-      const updatedChat = updater(chatToUpdate)
+      updatedChat = updater(chatToUpdate)
       return prev.map((c) => (c.id === chatId ? updatedChat : c))
     })
-    
-    // Sync to Supabase (always try if user is logged in)
-    if (user && chatToUpdate && chatId && typeof chatId === 'string' && chatId.includes('-')) {
-      // UUID format check - only sync if it's a Supabase UUID
+
+    // Wait a tick so state is set before we sync
+    await new Promise((r) => setTimeout(r, 0))
+
+    // Sync to Supabase — use updatedChat (has latest messages)
+    if (user && updatedChat && chatId && typeof chatId === 'string' && chatId.includes('-')) {
       try {
         console.log('Syncing chat to Supabase:', chatId)
         const result = await updateChat(chatId, {
-          messages: chatToUpdate.messages,
-          title: chatToUpdate.title,
-          model: chatToUpdate.model,
-          mode: chatToUpdate.mode,
+          messages: updatedChat.messages,
+          title: updatedChat.title,
+          model: updatedChat.model,
+          mode: updatedChat.mode,
         })
         console.log('Chat synced successfully:', result)
       } catch (error) {
