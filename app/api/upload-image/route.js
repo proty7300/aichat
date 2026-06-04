@@ -35,7 +35,7 @@ export async function POST(req) {
     
     await r2Client.send(command)
     
-    const imageUrl = `https://${process.env.R2_BUCKET_NAME}.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${filename}`
+    const imageUrl = `${process.env.R2_PUBLIC_URL}/${filename}`
     
     return Response.json({ url: imageUrl, filename })
   } catch (error) {
