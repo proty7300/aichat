@@ -352,7 +352,18 @@ export default function ChatPage() {
               imgContent = `![Generated image](${data.url})\n\n*Prompt: ${data.revisedPrompt || data.prompt}*`
             }
           } else if (data.b64) {
-            imgContent = `![Generated image](data:image/png;base64,${data.b64})\n\n*Prompt: ${data.prompt}*`
+            // Upload b64 ke R2 supaya tidak truncate di DB
+            try {
+              const byteChars = atob(data.b64)
+              const byteNums = new Array(byteChars.length)
+              for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i)
+              const blob = new Blob([new Uint8Array(byteNums)], { type: 'image/png' })
+              const r2Url = await uploadImageToR2(blob, chatId, `image-${Date.now()}.png`)
+              imgContent = `![Generated image](${r2Url})\n\n*Prompt: ${data.prompt}*`
+            } catch (error) {
+              console.error('R2 upload b64 error:', error)
+              imgContent = `![Generated image](data:image/png;base64,${data.b64})\n\n*Prompt: ${data.prompt}*`
+            }
           }
           
           updateChatInDb(chatId, (c) => ({
