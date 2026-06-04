@@ -45,7 +45,9 @@ export default function ChatPage() {
   const abortRef = useRef(null)
   const [attachedFile, setAttachedFile] = useState(null) // { name, content, type }
   const [isDragging, setIsDragging] = useState(false)
+  const [attachedImage, setAttachedImage] = useState(null) // { name, base64, previewUrl }
   const fileInputRef = useRef(null)
+  const imageInputRef = useRef(null)
 
   const activeChat = chats.find((c) => c.id === activeChatId) || null
   
@@ -207,6 +209,20 @@ export default function ChatPage() {
     const name = file.name
     const ext = name.split('.').pop().toLowerCase()
     const size = file.size
+
+    // Handle images
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+    if (imageExts.includes(ext)) {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result
+        const base64 = dataUrl.split(',')[1]
+        setAttachedImage({ name, base64, previewUrl: dataUrl, size })
+      }
+      reader.readAsDataURL(file)
+      return
+    }
+
     if (ext === 'zip') {
       setAttachedFile({ name, content: null, type: 'zip', size })
       return
@@ -244,7 +260,7 @@ export default function ChatPage() {
 
   const sendMessage = async () => {
     const text = input.trim()
-    if (!text && !attachedFile || isLoading) return
+    if (!text && !attachedFile && !attachedImage || isLoading) return
 
     // Siapkan file untuk dikirim ke API (tersembunyi dari tampilan)
     let fullText = text
@@ -293,7 +309,9 @@ export default function ChatPage() {
       console.log('Using existing chat:', chat.id, chat.isLocal)
     }
 
-    const userMsg = { id: genId(), role: 'user', content: text || (fileForApi ? '' : fullText), file: fileForApi ? { name: fileForApi.name, type: fileForApi.type, size: fileForApi.size } : null }
+    const imageForApi = attachedImage
+    if (attachedImage) setAttachedImage(null)
+    const userMsg = { id: genId(), role: 'user', content: text || (fileForApi ? '' : fullText), file: fileForApi ? { name: fileForApi.name, type: fileForApi.type, size: fileForApi.size } : null, image: imageForApi ? { name: imageForApi.name, previewUrl: imageForApi.previewUrl, size: imageForApi.size } : null }
     const assistantMsg = { id: genId(), role: 'assistant', content: '', isStreaming: true }
 
     updateChatInDb(chatId, (c) => ({
@@ -381,8 +399,9 @@ export default function ChatPage() {
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          messages: [...history, { role: 'user', content: text }],
+          messages: [...history, { role: 'user', content: fullText || text }],
           providerId, model, modeId: mode, overrideKey,
+          ...(imageForApi ? { imageBase64: imageForApi.base64 } : {}),
         }),
       })
 
@@ -716,6 +735,13 @@ export default function ChatPage() {
                     style={{ display: 'none' }}
                     onChange={handleFileAttach}
                   />
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = '' }}
+                  />
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     title="Lampirkan file"
@@ -728,9 +754,41 @@ export default function ChatPage() {
                   >
                     <Paperclip size={16} />
                   </button>
+                  <button
+                    onClick={() => imageInputRef.current?.click()}
+                    title="Lampirkan gambar"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: attachedImage ? 'var(--accent)' : 'var(--text-muted)',
+                      padding: '4px', marginBottom: 6, flexShrink: 0,
+                      display: 'flex', alignItems: 'center',
+                    }}
+                  >
+                    <ImageIcon size={16} />
+                  </button>
                 </>
               )}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {attachedImage && (
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
+                    <img
+                      src={attachedImage.previewUrl}
+                      alt={attachedImage.name}
+                      style={{ height: 64, maxWidth: 120, borderRadius: 8, objectFit: 'cover', display: 'block' }}
+                    />
+                    <button
+                      onClick={() => setAttachedImage(null)}
+                      style={{
+                        position: 'absolute', top: -6, right: -6,
+                        background: 'var(--text-muted)', border: 'none', borderRadius: '50%',
+                        width: 18, height: 18, cursor: 'pointer', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', color: 'white',
+                      }}
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                )}
                 {attachedFile && (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 6,
@@ -773,15 +831,15 @@ export default function ChatPage() {
               </div>
               <button
                 onClick={isLoading ? stopGeneration : sendMessage}
-                disabled={!input.trim() && !attachedFile && !isLoading}
+                disabled={!input.trim() && !attachedFile && !attachedImage && !isLoading}
                 style={{
                   background: isLoading ? '#ef4444' : 'var(--accent)',
                   border: 'none', borderRadius: 8,
                   width: 36, height: 36, flexShrink: 0,
-                  cursor: (!input.trim() && !attachedFile && !isLoading) ? 'not-allowed' : 'pointer',
+                  cursor: (!input.trim() && !attachedFile && !attachedImage && !isLoading) ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: 'var(--user-text)',
-                  opacity: (!input.trim() && !attachedFile && !isLoading) ? 0.4 : 1,
+                  opacity: (!input.trim() && !attachedFile && !attachedImage && !isLoading) ? 0.4 : 1,
                 }}
               >
                 {isLoading ? <X size={16} /> : <Send size={15} />}
@@ -875,6 +933,13 @@ function Message({ msg }) {
       }}>
         {isUser ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+            {msg.image && (
+              <img
+                src={msg.image.previewUrl}
+                alt={msg.image.name}
+                style={{ maxWidth: 240, maxHeight: 200, borderRadius: 10, objectFit: 'cover', display: 'block' }}
+              />
+            )}
             {msg.file && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 10,
