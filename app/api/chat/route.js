@@ -32,6 +32,7 @@ export async function POST(req) {
         if (!apiToken) throw new Error('Cloudflare API Token tidak ditemukan. Set CLOUDFLARE_API_TOKEN di Settings atau env vars.')
         if (!accountId) throw new Error('Cloudflare Account ID tidak ditemukan. Set CLOUDFLARE_ACCOUNT_ID di env vars.')
         result = await generateImageCloudflare({ prompt: lastMsg, model, apiToken, accountId })
+        console.log('Cloudflare result b64 length:', result.b64?.length, 'first 50 chars:', result.b64?.slice(0, 50))
         return Response.json({
           type: 'image',
           b64: result.b64,
