@@ -207,18 +207,18 @@ export default function ChatPage() {
     if (!file) return
     const name = file.name
     const ext = name.split('.').pop().toLowerCase()
+    const size = file.size
     
     if (ext === 'zip') {
-      // Untuk zip, simpan sebagai binary info saja
-      setAttachedFile({ name, content: null, type: 'zip', size: file.size })
+      setAttachedFile({ name, content: null, type: 'zip', size })
       e.target.value = ''
       return
     }
     
-    // Baca file teks (py, js, ts, txt, md, json, css, html, dll)
+    // Baca isi file untuk dikirim ke API (tapi tidak ditampilkan di chat)
     const reader = new FileReader()
     reader.onload = (ev) => {
-      setAttachedFile({ name, content: ev.target.result, type: ext })
+      setAttachedFile({ name, content: ev.target.result, type: ext, size })
     }
     reader.readAsText(file)
     e.target.value = ''
@@ -228,13 +228,16 @@ export default function ChatPage() {
     const text = input.trim()
     if (!text && !attachedFile || isLoading) return
 
-    // Gabungkan input dengan konten file jika ada
+    // Siapkan file untuk dikirim ke API (tersembunyi dari tampilan)
     let fullText = text
+    let fileForApi = null
     if (attachedFile) {
+      fileForApi = attachedFile
       if (attachedFile.content) {
-        fullText = (text ? text + '\n\n' : '') + `File: **${attachedFile.name}**\n\`\`\`${attachedFile.type}\n${attachedFile.content}\n\`\`\``
+        // Kirim ke API dengan isi file, tapi tidak tampil di chat
+        fullText = (text ? text + '\n\n' : '') + `File: ${attachedFile.name}\n\`\`\`${attachedFile.type}\n${attachedFile.content}\n\`\`\``
       } else {
-        fullText = (text ? text + '\n\n' : '') + `[File zip terlampir: **${attachedFile.name}** (${(attachedFile.size/1024).toFixed(1)} KB) — tidak bisa dibaca langsung, tolong jelaskan isi atau tujuannya]`
+        fullText = (text ? text + '\n\n' : '') + `[File zip: ${attachedFile.name} (${(attachedFile.size/1024).toFixed(1)} KB)]`
       }
       setAttachedFile(null)
     }
@@ -272,7 +275,7 @@ export default function ChatPage() {
       console.log('Using existing chat:', chat.id, chat.isLocal)
     }
 
-    const userMsg = { id: genId(), role: 'user', content: fullText }
+    const userMsg = { id: genId(), role: 'user', content: text || (fileForApi ? '' : fullText), file: fileForApi ? { name: fileForApi.name, type: fileForApi.type, size: fileForApi.size } : null }
     const assistantMsg = { id: genId(), role: 'assistant', content: '', isStreaming: true }
 
     updateChatInDb(chatId, (c) => ({
@@ -830,7 +833,37 @@ function Message({ msg }) {
         fontSize: 14,
       }}>
         {isUser ? (
-          <span style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{msg.content}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+            {msg.file && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                background: 'rgba(255,255,255,0.1)', borderRadius: 10,
+                padding: '10px 14px', minWidth: 160, maxWidth: 220,
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 8,
+                  background: 'rgba(255,255,255,0.15)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, opacity: 0.9 }}>
+                    {msg.file.type.toUpperCase()}
+                  </span>
+                </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {msg.file.name}
+                  </div>
+                  <div style={{ fontSize: 11, opacity: 0.7 }}>
+                    {(msg.file.size / 1024).toFixed(1)} KB
+                  </div>
+                </div>
+              </div>
+            )}
+            {msg.content && (
+              <span style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{msg.content}</span>
+            )}
+          </div>
         ) : (
           <MessageRenderer content={msg.content} isStreaming={msg.isStreaming} />
         )}
