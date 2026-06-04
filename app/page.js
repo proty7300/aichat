@@ -39,7 +39,6 @@ export default function ChatPage() {
   const [serverProviders, setServerProviders] = useState([])
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [hasLoadedChats, setHasLoadedChats] = useState(false)
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
@@ -66,14 +65,23 @@ export default function ChatPage() {
 
   // Auth state listener
   useEffect(() => {
+    // Check existing session immediately on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user || null
+      setUser(user)
+      setAuthLoading(false)
+      if (user) loadUserChats(user.id)
+    })
+
     const { data: { subscription } } = onAuthChange(async (user) => {
       setUser(user)
       setAuthLoading(false)
       
-      if (user && !hasLoadedChats) {
-        // Only load from Supabase if we don't have chats yet
+      if (user) {
         await loadUserChats(user.id)
-        setHasLoadedChats(true)
+      } else {
+        setChats([])
+        setActiveChatId(null)
       }
     })
     
