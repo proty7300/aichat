@@ -176,8 +176,10 @@ export default function ChatPage() {
     // Wait a tick so state is set before we sync
     await new Promise((r) => setTimeout(r, 0))
 
-    // Sync to Supabase — use updatedChat (has latest messages)
-    if (user && updatedChat && chatId && typeof chatId === 'string' && chatId.includes('-')) {
+    // Sync to Supabase — skip only if chat is still local (not yet saved to Supabase)
+    // isLocal=true means not yet saved; also skip short IDs (genId format = 8 chars, UUID = 36 chars)
+    const isSupabaseId = chatId && chatId.length > 20
+    if (user && updatedChat && isSupabaseId) {
       try {
         console.log('Syncing chat to Supabase:', chatId)
         const result = await updateChat(chatId, {
