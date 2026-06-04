@@ -1,4 +1,4 @@
-import { streamChat, generateImage, generateImageGoogle, generateImagePollinations, parseOpenAIStream } from '@/lib/llm'
+import { streamChat, generateImage, generateImageGoogle, generateImagePollinations, generateImageCloudflare, parseOpenAIStream } from '@/lib/llm'
 
 // REMOVED: export const runtime = 'edge'
 // Edge runtime has ~25s timeout which causes "Streaming request failed"
@@ -20,6 +20,18 @@ export async function POST(req) {
       // Pollinations - tidak perlu API key
       if (providerId === 'pollinations') {
         result = await generateImagePollinations({ prompt: lastMsg, model })
+        return Response.json({
+          type: 'image',
+          b64: result.b64,
+          prompt: lastMsg,
+          model,
+        })
+      } else if (providerId === 'cloudflare') {
+        const apiToken = overrideKey || process.env.CLOUDFLARE_API_TOKEN
+        const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+        if (!apiToken) throw new Error('Cloudflare API Token tidak ditemukan. Set CLOUDFLARE_API_TOKEN di Settings atau env vars.')
+        if (!accountId) throw new Error('Cloudflare Account ID tidak ditemukan. Set CLOUDFLARE_ACCOUNT_ID di env vars.')
+        result = await generateImageCloudflare({ prompt: lastMsg, model, apiToken, accountId })
         return Response.json({
           type: 'image',
           b64: result.b64,
