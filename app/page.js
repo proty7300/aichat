@@ -288,7 +288,23 @@ export default function ChatPage() {
 
     const imageForApi = attachedImage
     if (attachedImage) setAttachedImage(null)
-    const userMsg = { id: genId(), role: 'user', content: text || (fileForApi ? '' : fullText), file: fileForApi ? { name: fileForApi.name, type: fileForApi.type, size: fileForApi.size } : null, image: imageForApi ? { name: imageForApi.name, previewUrl: imageForApi.previewUrl, size: imageForApi.size } : null }
+
+    // Upload user image to R2 so we store URL instead of base64 in Supabase
+    let imageR2Url = null
+    if (imageForApi) {
+      try {
+        const byteChars = atob(imageForApi.base64)
+        const byteNums = new Array(byteChars.length)
+        for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i)
+        const blob = new Blob([new Uint8Array(byteNums)], { type: 'image/jpeg' })
+        imageR2Url = await uploadImageToR2(blob, chatId, `user-${Date.now()}-${imageForApi.name}`)
+      } catch (e) {
+        console.error('R2 user image upload error:', e)
+        // fallback: will use base64 previewUrl
+      }
+    }
+
+    const userMsg = { id: genId(), role: 'user', content: text || (fileForApi ? '' : fullText), file: fileForApi ? { name: fileForApi.name, type: fileForApi.type, size: fileForApi.size } : null, image: imageForApi ? { name: imageForApi.name, previewUrl: imageR2Url || imageForApi.previewUrl, size: imageForApi.size } : null }
     const assistantMsg = { id: genId(), role: 'assistant', content: '', isStreaming: true }
 
     updateChatInDb(chatId, (c) => ({
