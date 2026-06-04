@@ -21,6 +21,9 @@ export default function ModelSelector({ model, setModel, mode, setMode, serverPr
   const currentMode = MODES[mode]
 
   const providerHasKey = (providerId) => {
+    const provider = Object.values(PROVIDERS).find(p => p.id === providerId)
+    // Provider yang tidak butuh key (free) dianggap selalu "punya key"
+    if (provider?.noKeyRequired) return true
     const override = typeof window !== 'undefined'
       ? JSON.parse(localStorage.getItem('ai_chat_override_keys') || '{}')[providerId]
       : null
