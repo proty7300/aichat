@@ -297,33 +297,22 @@ export default function ChatPage() {
 
         const imgEl = await window.puter.ai.txt2img(prompt, { model: puterModel })
         
-        // Puter.js return HTMLImageElement - extract src berbagai cara
-        let imgSrc = null
-        if (imgEl && imgEl.src) imgSrc = imgEl.src
-        else if (imgEl && imgEl.getAttribute) imgSrc = imgEl.getAttribute('src')
+        // Puter.js return HTMLImageElement
+        // Kalau src adalah blob, fetch dan convert ke base64
+        let imgSrc = imgEl.src || ''
         
-        // Kalau blob URL atau tidak ada src, convert ke base64 via fetch
-        if (!imgSrc || imgSrc.startsWith('blob:') || imgSrc === '') {
-          if (imgEl.complete && imgEl.naturalWidth > 0) {
-            // Gambar sudah load, gunakan canvas
-            const canvas = document.createElement('canvas')
-            canvas.width = imgEl.naturalWidth
-            canvas.height = imgEl.naturalHeight
-            try {
-              canvas.getContext('2d').drawImage(imgEl, 0, 0)
-              imgSrc = canvas.toDataURL('image/png')
-            } catch {
-              // Canvas tainted, coba fetch blob
-            }
-          }
-          if ((!imgSrc || imgSrc === 'data:,') && imgEl.src?.startsWith('blob:')) {
-            const blobRes = await fetch(imgEl.src)
+        if (imgSrc.startsWith('blob:')) {
+          try {
+            const blobRes = await fetch(imgSrc)
             const blob = await blobRes.blob()
-            imgSrc = await new Promise(res => {
+            imgSrc = await new Promise((res, rej) => {
               const reader = new FileReader()
-              reader.onload = e => res(e.target.result)
+              reader.onload = (e) => res(e.target.result)
+              reader.onerror = rej
               reader.readAsDataURL(blob)
             })
+          } catch (fetchErr) {
+            console.error('blob fetch error:', fetchErr)
           }
         }
         
