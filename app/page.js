@@ -128,6 +128,13 @@ export default function ChatPage() {
   }
 
   const newChat = useCallback(async () => {
+    // Stop any ongoing generation first
+    if (abortRef.current) {
+      abortRef.current.abort()
+      abortRef.current = null
+    }
+    setIsLoading(false)
+
     const localId = genId()
     const chat = { id: localId, title: 'Chat baru', messages: [], model, mode, isLocal: true }
     setChats((prev) => [chat, ...prev])
@@ -570,6 +577,15 @@ export default function ChatPage() {
     )
   }
 
+  const selectChat = (id) => {
+    if (abortRef.current) {
+      abortRef.current.abort()
+      abortRef.current = null
+      setIsLoading(false)
+    }
+    setActiveChatId(id)
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
       <div style={{ display: 'flex', height: '100%' }} className="sidebar-desktop">
@@ -577,7 +593,7 @@ export default function ChatPage() {
           chats={chats}
           activeChatId={activeChatId}
           onNewChat={newChat}
-          onSelectChat={setActiveChatId}
+          onSelectChat={selectChat}
           onDeleteChat={deleteChatFromDb}
           onOpenSettings={() => setSettingsOpen(true)}
         />
@@ -591,7 +607,7 @@ export default function ChatPage() {
               chats={chats}
               activeChatId={activeChatId}
               onNewChat={newChat}
-              onSelectChat={setActiveChatId}
+              onSelectChat={selectChat}
               onDeleteChat={deleteChatFromDb}
               onOpenSettings={() => { setSettingsOpen(true); setSidebarOpen(false) }}
               isMobile
