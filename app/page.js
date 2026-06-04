@@ -44,6 +44,7 @@ export default function ChatPage() {
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
   const [attachedFile, setAttachedFile] = useState(null) // { name, content, type }
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef(null)
 
   const activeChat = chats.find((c) => c.id === activeChatId) || null
@@ -202,25 +203,42 @@ export default function ChatPage() {
     }
   }
 
-  const handleFileAttach = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const processFile = (file) => {
     const name = file.name
     const ext = name.split('.').pop().toLowerCase()
     const size = file.size
-    
     if (ext === 'zip') {
       setAttachedFile({ name, content: null, type: 'zip', size })
-      e.target.value = ''
       return
     }
-    
-    // Baca isi file untuk dikirim ke API (tapi tidak ditampilkan di chat)
     const reader = new FileReader()
     reader.onload = (ev) => {
       setAttachedFile({ name, content: ev.target.result, type: ext, size })
     }
     reader.readAsText(file)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) processFile(file)
+  }
+
+  const handleFileAttach = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    processFile(file)
     e.target.value = ''
   }
 
@@ -642,11 +660,34 @@ export default function ChatPage() {
           )}
         </div>
 
-        <div className="chat-input-container" style={{
-          padding: '10px 14px 14px',
-          borderTop: '1px solid var(--border)',
-          background: 'var(--bg)',
-        }}>
+        <div
+          className="chat-input-container"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          style={{
+            padding: '10px 14px 14px',
+            borderTop: isDragging ? '2px solid var(--accent)' : '1px solid var(--border)',
+            background: isDragging ? 'var(--bg-secondary)' : 'var(--bg)',
+            transition: 'border-color 0.15s, background 0.15s',
+            position: 'relative',
+          }}>
+          {isDragging && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(var(--accent-rgb, 99,102,241), 0.08)',
+              borderRadius: 0, zIndex: 10, pointerEvents: 'none',
+            }}>
+              <div style={{
+                border: '2px dashed var(--accent)', borderRadius: 12,
+                padding: '16px 32px', color: 'var(--accent)',
+                fontSize: 14, fontWeight: 500,
+              }}>
+                Drop file di sini
+              </div>
+            </div>
+          )}
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
             {/* Model Selector - Like ChatGPT/Claude */}
             <div style={{ marginBottom: 10 }}>
