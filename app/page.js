@@ -179,6 +179,7 @@ export default function ChatPage() {
     // Sync to Supabase — skip only if chat is still local (not yet saved to Supabase)
     // isLocal=true means not yet saved; also skip short IDs (genId format = 8 chars, UUID = 36 chars)
     const isSupabaseId = chatId && chatId.length > 20
+    console.log('updateChatInDb:', { chatId, isSupabaseId, hasUser: !!user, msgCount: updatedChat?.messages?.length })
     if (user && updatedChat && isSupabaseId) {
       try {
         console.log('Syncing chat to Supabase:', chatId)
@@ -479,12 +480,14 @@ export default function ChatPage() {
             if (parsed.error) throw new Error(parsed.error)
             if (parsed.text) {
               accumulated += parsed.text
-              updateChatInDb(chatId, (c) => ({
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === assistantMsg.id ? { ...m, content: accumulated } : m
-                ),
-              }))
+              // Update UI only (no Supabase call per chunk)
+              setChats((prev) => prev.map((c) =>
+                c.id === chatId
+                  ? { ...c, messages: c.messages.map((m) =>
+                      m.id === assistantMsg.id ? { ...m, content: accumulated } : m
+                    )}
+                  : c
+              ))
             }
           } catch (e) {
             if (e.message !== 'Unexpected end of JSON input') throw e
@@ -492,10 +495,11 @@ export default function ChatPage() {
         }
       }
 
+      // Save final result to Supabase once after streaming done
       updateChatInDb(chatId, (c) => ({
         ...c,
         messages: c.messages.map((m) =>
-          m.id === assistantMsg.id ? { ...m, isStreaming: false } : m
+          m.id === assistantMsg.id ? { ...m, content: accumulated, isStreaming: false } : m
         ),
       }))
     } catch (err) {
