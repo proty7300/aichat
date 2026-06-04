@@ -46,7 +46,7 @@ export default function ChatPage() {
   const [attachedFile, setAttachedFile] = useState(null) // { name, content, type }
   const [isDragging, setIsDragging] = useState(false)
   const [attachedImage, setAttachedImage] = useState(null) // { name, base64, previewUrl }
-  const [autoSelectedModel, setAutoSelectedModel] = useState(null) // { modelId, modelName, reason }
+
   const fileInputRef = useRef(null)
   const imageInputRef = useRef(null)
 
@@ -238,46 +238,6 @@ export default function ChatPage() {
     e.target.value = ''
   }
 
-  // Auto-select best model based on context
-  const autoSelectModel = (hasImage, currentMode) => {
-    const overrideKeys = loadOverrideKeys()
-    const allModels = getAllModels()
-
-    const providerHasKey = (providerId) => {
-      const provider = Object.values(require('@/lib/models').PROVIDERS || {}).find ? null : null
-      const override = overrideKeys[providerId]
-      const serverKey = serverProviders?.find((p) => p.id === providerId)?.hasKey
-      return !!(override || serverKey)
-    }
-
-    // If image attached, always use LLaVA vision
-    if (hasImage) {
-      const llava = allModels.find(m => m.id === '@cf/llava-hf/llava-1.5-7b-hf')
-      if (llava) return { modelId: llava.id, modelName: llava.name, reason: 'Gambar terdeteksi' }
-    }
-
-    // Priority order for text models (best to fallback)
-    const priority = [
-      { providerId: 'generalcompute', modelId: 'deepseek-v3.2', name: 'DeepSeek V3.2' },
-      { providerId: 'generalcompute', modelId: 'deepseek-v3.1', name: 'DeepSeek V3.1' },
-      { providerId: 'cerebras', modelId: 'glm-4.7', name: 'Z.ai GLM 4.7' },
-      { providerId: 'cerebras', modelId: 'gpt-oss', name: 'OpenAI GPT OSS' },
-      { providerId: 'cloudflare', modelId: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', name: 'Llama 3.3 70B' },
-    ]
-
-    for (const candidate of priority) {
-      const override = overrideKeys[candidate.providerId]
-      const serverKey = serverProviders?.find((p) => p.id === candidate.providerId)?.hasKey
-      if (override || serverKey) {
-        const modelExists = allModels.find(m => m.id === candidate.modelId && m.modes?.includes(currentMode))
-        if (modelExists) {
-          return { modelId: candidate.modelId, modelName: candidate.name, reason: 'Model terbaik tersedia' }
-        }
-      }
-    }
-    return null
-  }
-
   const sendMessage = async () => {
     const text = input.trim()
     if (!text && !attachedFile && !attachedImage || isLoading) return
@@ -361,23 +321,7 @@ export default function ChatPage() {
     setIsLoading(true)
 
     // Auto-select best model
-    const autoResult = autoSelectModel(!!attachedImage, mode)
     let activeModel = model
-    if (autoResult && autoResult.modelId !== model) {
-      activeModel = autoResult.modelId
-      setModel(autoResult.modelId)
-      setAutoSelectedModel(autoResult)
-      setTimeout(() => setAutoSelectedModel(null), 4000)
-    } else if (attachedImage) {
-      // Still notify if image attached even if already on LLaVA
-      const llavaId = '@cf/llava-hf/llava-1.5-7b-hf'
-      if (model !== llavaId) {
-        activeModel = llavaId
-        setModel(llavaId)
-        setAutoSelectedModel({ modelId: llavaId, modelName: 'LLaVA 1.5 Vision', reason: 'Gambar terdeteksi' })
-        setTimeout(() => setAutoSelectedModel(null), 4000)
-      }
-    }
 
     const overrideKeys = loadOverrideKeys()
     const allModels = getAllModels()
@@ -772,21 +716,6 @@ export default function ChatPage() {
               />
             </div>
 
-            {/* Auto-select notification */}
-            {autoSelectedModel && (
-              <div style={{
-                marginBottom: 8, padding: '6px 12px',
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--accent)',
-                borderRadius: 8, fontSize: 12,
-                color: 'var(--text-muted)',
-                display: 'flex', alignItems: 'center', gap: 6,
-                animation: 'fadeIn 0.2s ease',
-              }}>
-                <span style={{ color: 'var(--accent)' }}>✦</span>
-                <span>Auto-pilih <strong style={{ color: 'var(--text)' }}>{autoSelectedModel.modelName}</strong> — {autoSelectedModel.reason}</span>
-              </div>
-            )}
             
             <div className="chat-input-box" style={{
               display: 'flex', gap: 8, alignItems: 'flex-end',
