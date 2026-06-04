@@ -269,6 +269,46 @@ export default function ChatPage() {
       const controller = new AbortController()
       abortRef.current = controller
 
+      // ── Pollinations: generate gambar langsung di browser (bypass server) ──
+      if (providerId === 'pollinations' && mode === 'image') {
+        const prompt = text
+        const modelMap = {
+          'flux': 'black-forest-labs/FLUX.1-schnell',
+          'turbo': 'stabilityai/sdxl-turbo',
+        }
+        const hfModel = modelMap[model] || 'black-forest-labs/FLUX.1-schnell'
+
+        // Pakai Hugging Face via puter.js (client-side, gratis)
+        // Load puter.js jika belum ada
+        if (!window.puter) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script')
+            script.src = 'https://js.puter.com/v2/'
+            script.onload = resolve
+            script.onerror = reject
+            document.head.appendChild(script)
+          })
+        }
+
+        const imgEl = await window.puter.ai.txt2img(prompt, { model: 'black-forest-labs/FLUX.1-schnell' })
+        // Convert img element ke base64
+        const canvas = document.createElement('canvas')
+        canvas.width = imgEl.naturalWidth || imgEl.width
+        canvas.height = imgEl.naturalHeight || imgEl.height
+        canvas.getContext('2d').drawImage(imgEl, 0, 0)
+        const b64 = canvas.toDataURL('image/png').split(',')[1]
+
+        const imgContent = `![Generated image](data:image/png;base64,${b64})\n\n*Prompt: ${prompt}*`
+        updateChatInDb(chatId, (c) => ({
+          ...c,
+          messages: c.messages.map((m) =>
+            m.id === assistantMsg.id ? { ...m, content: imgContent, isStreaming: false } : m
+          ),
+        }))
+        setIsLoading(false)
+        return
+      }
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
