@@ -345,6 +345,7 @@ export default function ChatPage() {
     const allModels = getAllModels()
     const modelInfo = allModels.find((m) => m.id === activeModel)
     const providerId = modelInfo?.provider || 'generalcompute'
+    const apiModel = modelInfo?.apiModel || activeModel
     const overrideKey = overrideKeys[providerId] || ''
     
     console.log('Override keys:', overrideKeys)
@@ -417,7 +418,7 @@ export default function ChatPage() {
         signal: controller.signal,
         body: JSON.stringify({
           messages: [...history, { role: 'user', content: fullText || text }],
-          providerId, model: activeModel, modeId: mode, overrideKey,
+          providerId, model: apiModel, modeId: mode, overrideKey,
           ...(imageForApi ? { imageBase64: imageForApi.base64 } : {}),
         }),
       })
