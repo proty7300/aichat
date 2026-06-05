@@ -14,6 +14,17 @@ const DEFAULT_MODE = 'chat'
 function genId() { return Math.random().toString(36).slice(2, 10) }
 function genTitle(text) { return text.slice(0, 40) + (text.length > 40 ? '...' : '') }
 
+// ── Local cache (safety net so chats survive refresh even if Supabase fails) ──
+function chatCacheKey(userId) { return 'ai_chat_cache_' + (userId || 'guest') }
+function loadCachedChats(userId) {
+  if (typeof window === 'undefined') return []
+  try { return JSON.parse(localStorage.getItem(chatCacheKey(userId)) || '[]') } catch { return [] }
+}
+function saveCachedChats(userId, chats) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(chatCacheKey(userId), JSON.stringify(chats)) } catch {}
+}
+
 export default function ChatPage() {
   const [chats, setChats] = useState([])
   const [activeChatId, setActiveChatId] = useState(null)
@@ -42,6 +53,7 @@ export default function ChatPage() {
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
   const abortRef = useRef(null)
+  const hydratedRef = useRef(false)
   const [attachedFile, setAttachedFile] = useState(null) // { name, content, type }
   const [isDragging, setIsDragging] = useState(false)
   const [attachedImage, setAttachedImage] = useState(null) // { name, base64, previewUrl }
@@ -90,17 +102,28 @@ export default function ChatPage() {
 
   // Load chats from Supabase
   const loadUserChats = async (userId) => {
+    // 1) Restore instantly from local cache so chats never disappear on refresh,
+    //    even if Supabase (table/RLS) is unavailable.
+    const cached = loadCachedChats(userId)
+    if (cached.length > 0) {
+      setChats(cached)
+      setActiveChatId((prev) => prev || cached[0].id)
+    }
+    hydratedRef.current = true
+
+    // 2) Try Supabase as the source of truth.
     try {
       console.log('Loading chats for user:', userId)
       const userChats = await loadChats(userId)
       console.log('Loaded chats from Supabase:', userChats)
-      setChats(userChats)
       if (userChats.length > 0) {
-        console.log('Setting activeChatId to:', userChats[0].id)
+        setChats(userChats)
         setActiveChatId(userChats[0].id)
+        saveCachedChats(userId, userChats)
       }
+      // If Supabase returns nothing but we have cached chats, keep the cache.
     } catch (error) {
-      console.error('Error loading chats:', error)
+      console.error('Error loading chats (memakai cache lokal):', error)
     }
   }
 
@@ -119,6 +142,12 @@ export default function ChatPage() {
   useEffect(() => {
     fetch('/api/models').then((r) => r.json()).then(setServerProviders).catch(() => {})
   }, [])
+
+  // Persist chats to localStorage as a safety net against data loss on refresh.
+  useEffect(() => {
+    if (!user || !hydratedRef.current) return
+    saveCachedChats(user.id, chats)
+  }, [chats, user])
 
   const toggleDark = () => {
     const next = !dark
